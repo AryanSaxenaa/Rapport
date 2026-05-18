@@ -24,6 +24,15 @@ export function App() {
     setSelectedContact,
   } = useRapportStore()
 
+  // Listen for orb toggle from main process
+  useEffect(() => {
+    const cleanup = window.electron?.onToggleCommandBar?.(() => {
+      const current = useRapportStore.getState().commandOpen
+      setCommandOpen(!current)
+    })
+    return cleanup
+  }, [setCommandOpen])
+
   // Fetch contacts on mount
   useEffect(() => {
     fetchContacts()
@@ -46,10 +55,10 @@ export function App() {
     return () => ws.close()
   }, [pushTranscript, setActiveBrief, setSidecarStatus])
 
-  // Build graph nodes/links from real contacts
+  // Build graph nodes/links from contacts
   const graphData = useMemo(() => {
-    const allContacts = contacts.length > 0 ? contacts : [selectedContact]
-    const nodes = allContacts.map((c, i) => ({
+    if (contacts.length === 0) return { nodes: [], links: [] }
+    const nodes = contacts.map((c, i) => ({
       id: c.contactEmail,
       name: c.contactName,
       company: c.company,
@@ -68,7 +77,7 @@ export function App() {
       })
     }
     return { nodes, links }
-  }, [contacts, selectedContact])
+  }, [contacts])
 
   return (
     <main className="rapport-shell">
@@ -116,7 +125,19 @@ export function App() {
         ) : null}
 
         <div className="overview-grid">
-          <ContactCard contact={selectedContact} />
+          {contacts.length > 0 ? (
+            <ContactCard contact={selectedContact} />
+          ) : (
+            <section className="contact-card empty-state">
+              <div className="avatar-mark">?</div>
+              <div>
+                <span className="micro-label">No contacts yet</span>
+                <p style={{ marginTop: 10, color: 'var(--n-dim)', fontSize: 11 }}>
+                  Ingest emails or start recording to populate your relationship graph.
+                </p>
+              </div>
+            </section>
+          )}
           <section className="signal-panel">
             <div className="panel-heading">
               <Radio size={15} />
@@ -158,13 +179,21 @@ export function App() {
         <RelationshipGraph nodes={graphData.nodes} links={graphData.links} />
 
         <footer className="footer-actions">
-          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => void window.electron?.ingestEmails?.()}
+          >
             <Mail size={14} />
-            <span onClick={() => void window.electron?.ingestEmails?.()}>Ingest email</span>
+            <span>Ingest email</span>
           </motion.button>
-          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setCommandOpen(true)}
+          >
             <Database size={14} />
-            <span onClick={() => setCommandOpen(true)}>Query memory</span>
+            <span>Query memory</span>
           </motion.button>
         </footer>
       </section>

@@ -3,7 +3,7 @@ import { Loader2, Search, X } from 'lucide-react'
 import { useRapportStore } from '../store/rapport-store'
 
 export function CommandBar({ onClose }: { onClose: () => void }) {
-  const [query, setQuery] = useState('brief for mira.voss@northstar-ledger.example')
+  const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { selectedContact, setActiveBrief, fetchBrief } = useRapportStore()

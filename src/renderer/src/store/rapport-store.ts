@@ -49,9 +49,9 @@ type RapportState = {
 }
 
 export const defaultContact: Contact = {
-  contactEmail: 'mira.voss@northstar-ledger.example',
-  contactName: 'Mira Voss',
-  company: 'Northstar Ledger',
+  contactEmail: '',
+  contactName: 'No contact selected',
+  company: '',
   stance: 'neutral',
 }
 
@@ -88,7 +88,7 @@ export const useRapportStore = create<RapportState>((set, get) => ({
       set({
         contacts: list,
         contactsLoading: false,
-        selectedContact: list.length > 0 ? list[0] : get().selectedContact,
+        selectedContact: list.length > 0 ? list[0] : defaultContact,
       })
     } catch (err) {
       set({ contactsLoading: false, contactsError: String(err) })

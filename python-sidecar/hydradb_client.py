@@ -104,6 +104,31 @@ async def write_interaction_to_hydradb(
                 ],
             )
         )
+
+        # Also write to a contacts manifest for reliable discovery
+        if contact_email:
+            manifest_meta = {
+                "contact_email": contact_email,
+                "contact_name": contact_name or "",
+                "company": company or "",
+                "interaction_date": date.today().isoformat(),
+            }
+            try:
+                await _with_retry(
+                    lambda: client.upload.add_memory(
+                        tenant_id=TENANT_ID,
+                        sub_tenant_id="_contacts_manifest",
+                        memories=[{
+                            "text": f"Contact: {contact_name or contact_email} at {company or 'unknown'}",
+                            "infer": True,
+                            "user_name": contact_name or contact_email or "unknown",
+                            "metadata": manifest_meta,
+                        }],
+                    )
+                )
+            except Exception:
+                pass  # manifest write is best-effort
+
     except Exception as exc:
         return {"status": "error", "transport": "python-sdk", "error": _error_payload(exc)}
     return {"status": "ok", "transport": "python-sdk", "data": _to_plain_data(result)}

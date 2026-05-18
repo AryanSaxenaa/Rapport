@@ -117,37 +117,73 @@ async def list_contacts():
     client = _hydradb_client()
     if not client:
         return {"contacts": [], "source": "unavailable"}
-    try:
-        root_data = await _with_retry(
-            lambda: client.recall.full_recall(
-                tenant_id=TENANT_ID,
-                query="*",
-                max_results=20,
-                mode="thinking",
-                graph_context=True,
-                recency_bias=0.0,
-            )
-        )
-        root_plain = _to_plain_data(root_data)
-        memories = root_plain.get("memories") or root_plain.get("results") or []
 
-        contacts: list[dict[str, Any]] = []
-        seen: set[str] = set()
-        for mem in memories:
-            meta = mem.get("metadata") or {}
-            email = meta.get("contact_email", "")
-            if email and email not in seen:
-                seen.add(email)
-                contacts.append(
-                    {
+    contacts: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    try:
+        # Strategy 1: Try full_recall with contact-related queries
+        for q in ["contact", "email", "meeting", "interaction"]:
+            try:
+                root_data = await _with_retry(
+                    lambda q=q: client.recall.full_recall(
+                        tenant_id=TENANT_ID,
+                        query=q,
+                        max_results=30,
+                        mode="thinking",
+                        graph_context=True,
+                        recency_bias=0.0,
+                    )
+                )
+                root_plain = _to_plain_data(root_data)
+                memories = root_plain.get("memories") or root_plain.get("results") or []
+                for mem in memories:
+                    meta = mem.get("metadata") or {}
+                    email = meta.get("contact_email", "")
+                    if email and email not in seen:
+                        seen.add(email)
+                        extracted = mem.get("additional_metadata", {}).get("extracted", {})
+                        contacts.append({
+                            "contactEmail": email,
+                            "contactName": meta.get("contact_name", email.split("@")[0]),
+                            "company": meta.get("company", ""),
+                            "stance": meta.get("stance") or extracted.get("stance", "neutral"),
+                            "lastInteraction": meta.get("interaction_date", ""),
+                            "topics": meta.get("topics_raised", []),
+                        })
+            except Exception:
+                pass
+
+        # Strategy 2: Try recall_preferences on the default sub-tenant for a broad search
+        try:
+            pref_data = await _with_retry(
+                lambda: client.recall.recall_preferences(
+                    tenant_id=TENANT_ID,
+                    sub_tenant_id="_contacts_manifest",
+                    query="contact",
+                    max_results=50,
+                    mode="thinking",
+                    graph_context=True,
+                    recency_bias=0.0,
+                )
+            )
+            pref_plain = _to_plain_data(pref_data)
+            manifests = pref_plain.get("memories") or pref_plain.get("results") or []
+            for man in manifests:
+                meta = man.get("metadata") or {}
+                email = meta.get("contact_email", "")
+                if email and email not in seen:
+                    seen.add(email)
+                    contacts.append({
                         "contactEmail": email,
                         "contactName": meta.get("contact_name", email.split("@")[0]),
                         "company": meta.get("company", ""),
-                        "stance": meta.get("stance") or (extracted.get("stance", "neutral") if (extracted := mem.get("additional_metadata", {}).get("extracted", {})) else "neutral"),
+                        "stance": "neutral",
                         "lastInteraction": meta.get("interaction_date", ""),
                         "topics": meta.get("topics_raised", []),
-                    }
-                )
+                    })
+        except Exception:
+            pass
 
         return {"contacts": contacts, "source": "hydradb"}
     except Exception as exc:

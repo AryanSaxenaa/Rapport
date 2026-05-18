@@ -135,9 +135,8 @@ ipcMain.handle('ingest-emails', async () => {
   return callSidecar('/ingest/emails', { method: 'POST' })
 })
 
-ipcMain.on('toggle-command-bar', () => {
-  mainWindow?.webContents.send('toggle-command-bar')
-})
+// App minimize/restore is handled client-side in FloatingOrb (toggles the control-surface content)
+// The tray 'Show Rapport' menu item shows the window via BrowserWindow.show()
 
 app.whenReady().then(() => {
   startPythonSidecar()

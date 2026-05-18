@@ -36,11 +36,13 @@ type RapportState = {
   contacts: Contact[]
   contactsLoading: boolean
   contactsError: string | null
+  minimized: boolean
   setRecording: (value: boolean) => void
   setSidecarStatus: (value: RapportState['sidecarStatus']) => void
   setCommandOpen: (value: boolean) => void
   setActiveBrief: (brief: Brief | null) => void
   setBriefLoading: (loading: boolean) => void
+  setMinimized: (value: boolean) => void
   pushTranscript: (line: string) => void
   setDetectedContacts: (contacts: string[]) => void
   setSelectedContact: (contact: Contact) => void
@@ -59,6 +61,7 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   isRecording: false,
   sidecarStatus: 'checking',
   commandOpen: false,
+  minimized: false,
   activeBrief: null,
   briefLoading: false,
   liveTranscript: ['Waiting for meeting audio.', 'Relationship signals will appear here as Rapport listens.'],
@@ -73,6 +76,7 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   setCommandOpen: (value) => set({ commandOpen: value }),
   setActiveBrief: (brief) => set({ activeBrief: brief }),
   setBriefLoading: (loading) => set({ briefLoading: loading }),
+  setMinimized: (value) => set({ minimized: value }),
   pushTranscript: (line) =>
     set((state) => ({
       liveTranscript: [...state.liveTranscript.slice(-7), line],

@@ -7,13 +7,7 @@ const electronApi = {
     ipcRenderer.invoke('get-brief', payload),
   getContacts: () => ipcRenderer.invoke('get-contacts'),
   ingestEmails: () => ipcRenderer.invoke('ingest-emails'),
-  send: (channel: 'toggle-command-bar') => ipcRenderer.send(channel),
-  onToggleCommandBar: (callback: () => void) => {
-    ipcRenderer.on('toggle-command-bar', callback)
-    return () => {
-      ipcRenderer.removeListener('toggle-command-bar', callback)
-    }
-  },
+  // App minimize/restore is handled client-side in FloatingOrb
 }
 
 contextBridge.exposeInMainWorld('electron', electronApi)

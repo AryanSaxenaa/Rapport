@@ -7,7 +7,7 @@ import { useRapportStore } from '../store/rapport-store'
 type OrbState = 'idle' | 'loading' | 'live' | 'brief'
 
 export function FloatingOrb() {
-  const { isRecording, activeBrief, briefLoading, liveTranscript, detectedContacts, setActiveBrief } =
+  const { isRecording, activeBrief, briefLoading, liveTranscript, detectedContacts, setActiveBrief, minimized, setMinimized } =
     useRapportStore()
   const [orbState, setOrbState] = useState<OrbState>('idle')
 
@@ -17,6 +17,11 @@ export function FloatingOrb() {
     else if (isRecording) setOrbState('live')
     else setOrbState('idle')
   }, [isRecording, activeBrief, briefLoading])
+
+  function toggleMinimized() {
+    const store = useRapportStore.getState()
+    store.setMinimized(!store.minimized)
+  }
 
   return (
     <div className="orb-anchor">
@@ -29,11 +34,8 @@ export function FloatingOrb() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.84, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-            onClick={() => {
-              const store = useRapportStore.getState()
-              store.setCommandOpen(!store.commandOpen)
-            }}
-            title="Toggle command bar"
+            onClick={toggleMinimized}
+            title={minimized ? 'Expand Rapport' : 'Minimize Rapport'}
           >
             <span>R</span>
             <i />
@@ -61,10 +63,7 @@ export function FloatingOrb() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.94 }}
             transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-            onClick={() => {
-              const store = useRapportStore.getState()
-              store.setCommandOpen(!store.commandOpen)
-            }}
+            onClick={toggleMinimized}
           >
             <div className="live-head">
               <span className="rec-dot" />

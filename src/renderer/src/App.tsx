@@ -11,6 +11,7 @@ import type { Contact } from './store/rapport-store'
 export function App() {
   const {
     commandOpen,
+    minimized,
     isRecording,
     sidecarStatus,
     selectedContact,
@@ -71,9 +72,9 @@ export function App() {
   }, [contacts])
 
   return (
-    <main className="rapport-shell">
+    <main className={`rapport-shell${minimized ? ' minimised' : ''}`}>
       <div className="dot-field" />
-      <section className="control-surface">
+      {!minimized && <section className="control-surface">
         <header className="topbar">
           <div>
             <span className="glyph">RAPPORT</span>
@@ -187,7 +188,7 @@ export function App() {
             <span>Query memory</span>
           </motion.button>
         </footer>
-      </section>
+      </section>}
 
       <FloatingOrb />
 

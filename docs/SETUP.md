@@ -37,10 +37,14 @@ HYDRA_DB_API_KEY=...
 HYDRA_DB_TENANT_ID=mq66nfnt5t
 HYDRADB_TENANT_ID=mq66nfnt5t
 OPENROUTER_API_KEY=...
+EXTRACTION_MODEL=openrouter/owl-alpha,poolside/laguna-m.1:free
+BRIEF_MODEL=openrouter/owl-alpha,poolside/laguna-m.1:free
 MY_EMAIL=you@example.com
 ```
 
 Both tenant variables are included because some tools use `HYDRA_DB_TENANT_ID` and some CLI docs refer to `HYDRADB_TENANT_ID`.
+
+Model env vars (`EXTRACTION_MODEL`, `BRIEF_MODEL`) accept comma-separated model IDs. The first is the primary model; subsequent entries are fallbacks tried if the primary is unavailable. Both default to `openrouter/owl-alpha,poolside/laguna-m.1:free`.
 
 ## Run Desktop App
 

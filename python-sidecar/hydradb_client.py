@@ -13,6 +13,14 @@ TENANT_ID = os.getenv("HYDRA_DB_TENANT_ID") or os.getenv("HYDRADB_TENANT_ID") or
 API_KEY = os.getenv("HYDRA_DB_API_KEY") or os.getenv("HYDRADB_API_KEY")
 RETRYABLE_STATUS_CODES = {429, 500, 503}
 
+# Configurable brief model via env var (comma-separated for fallback ordering)
+# Default: openrouter/owl-alpha primary, poolside/laguna-m.1:free fallback
+_BRIEF_MODELS = [
+    m.strip()
+    for m in (os.getenv("BRIEF_MODEL") or "openrouter/owl-alpha,poolside/laguna-m.1:free").split(",")
+    if m.strip()
+]
+
 
 def _sub_tenant_id(contact_email: str | None) -> str:
     value = contact_email or "unknown"
@@ -124,7 +132,7 @@ communicationStyle, talkingPoints, landmines, lastInteraction, powerNote.
                 "X-Title": "Rapport",
             },
             json={
-                "models": ["openrouter/owl-alpha", "poolside/laguna-m.1:free"],
+                "models": _BRIEF_MODELS,
                 "temperature": 0.2,
                 "max_tokens": 1500,
                 "messages": [{"role": "user", "content": prompt}],

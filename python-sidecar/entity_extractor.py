@@ -9,6 +9,14 @@ EXTRACTION_SYSTEM = """Return ONLY valid JSON with keys:
 people, companies, topics, commitments, stance, sentiment_shift, summary.
 Capture professional relationship intelligence, political influence, risks, and follow-ups."""
 
+# Configurable model via env var (comma-separated for fallback ordering)
+# Default: openrouter/owl-alpha primary, poolside/laguna-m.1:free fallback
+_EXTRACTION_MODELS = [
+    m.strip()
+    for m in (os.getenv("EXTRACTION_MODEL") or "openrouter/owl-alpha,poolside/laguna-m.1:free").split(",")
+    if m.strip()
+]
+
 
 async def extract_entities(text: str) -> dict[str, Any]:
     if not text.strip():
@@ -27,7 +35,7 @@ async def extract_entities(text: str) -> dict[str, Any]:
                 "X-Title": "Rapport",
             },
             json={
-                "models": ["openrouter/owl-alpha", "poolside/laguna-m.1:free"],
+                "models": _EXTRACTION_MODELS,
                 "temperature": 0.1,
                 "max_tokens": 1200,
                 "messages": [
@@ -45,6 +53,7 @@ async def extract_entities(text: str) -> dict[str, Any]:
 
 
 def fallback_extraction(text: str) -> dict[str, Any]:
+    cleaned = text.strip()
     return {
         "people": [],
         "companies": [],
@@ -52,5 +61,5 @@ def fallback_extraction(text: str) -> dict[str, Any]:
         "commitments": [],
         "stance": "neutral",
         "sentiment_shift": None,
-        "summary": text[:500] if text else "No transcript content available.",
+        "summary": cleaned[:500] if cleaned else "No transcript content available.",
     }

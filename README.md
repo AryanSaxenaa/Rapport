@@ -103,8 +103,12 @@ HYDRA_DB_API_KEY=...
 HYDRA_DB_TENANT_ID=mq66nfnt5t
 HYDRADB_TENANT_ID=mq66nfnt5t
 OPENROUTER_API_KEY=...
+EXTRACTION_MODEL=openrouter/owl-alpha,poolside/laguna-m.1:free
+BRIEF_MODEL=openrouter/owl-alpha,poolside/laguna-m.1:free
 MY_EMAIL=you@example.com
 ```
+
+Model env vars accept comma-separated lists for automatic fallback ordering (`primary,fallback1,fallback2`).
 
 ## Verification
 

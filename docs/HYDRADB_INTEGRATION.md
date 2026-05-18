@@ -156,6 +156,17 @@ Planned:
 - tenant provisioning helper
 - richer metadata filters by date, interaction type, and deal stage
 
+## OpenRouter Model Configuration
+
+LLM tasks use configurable models via environment variables:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `EXTRACTION_MODEL` | Entity extraction (stance, topics, commitments) | `openrouter/owl-alpha,poolside/laguna-m.1:free` |
+| `BRIEF_MODEL` | Pre-call brief synthesis | `openrouter/owl-alpha,poolside/laguna-m.1:free` |
+
+Values are comma-separated for OpenRouter fallback routing. The first model is tried first; subsequent models are used if the primary is unavailable or returns errors.
+
 ## HydraDB Team Feedback Areas
 
 The most useful feedback from HydraDB would be:

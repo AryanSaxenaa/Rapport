@@ -17,12 +17,14 @@ export function App() {
     selectedContact,
     contacts,
     contactsLoading,
+    ingestingEmails,
     setCommandOpen,
     setSidecarStatus,
     setActiveBrief,
     pushTranscript,
     fetchContacts,
     setSelectedContact,
+    ingestEmails,
   } = useRapportStore()
 
   // Fetch contacts on mount
@@ -98,7 +100,7 @@ export function App() {
             <RefreshCw size={16} className="spin" />
             <span>Loading contacts…</span>
           </div>
-        ) : contacts.length > 1 ? (
+        ) : contacts.length > 0 ? (
           <div className="contact-strip">
             <Users size={13} />
             <span className="micro-label">Contacts</span>
@@ -174,10 +176,12 @@ export function App() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={() => void window.electron?.ingestEmails?.()}
+            disabled={ingestingEmails}
+            onClick={() => void ingestEmails()}
+            style={{ opacity: ingestingEmails ? 0.6 : 1 }}
           >
-            <Mail size={14} />
-            <span>Ingest email</span>
+            {ingestingEmails ? <RefreshCw size={14} className="spin" /> : <Mail size={14} />}
+            <span>{ingestingEmails ? 'Ingesting…' : 'Ingest email'}</span>
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.03 }}

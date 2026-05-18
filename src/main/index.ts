@@ -135,8 +135,25 @@ ipcMain.handle('ingest-emails', async () => {
   return callSidecar('/ingest/emails', { method: 'POST' })
 })
 
-// App minimize/restore is handled client-side in FloatingOrb (toggles the control-surface content)
-// The tray 'Show Rapport' menu item shows the window via BrowserWindow.show()
+let windowBeforeMinimize: { x: number; y: number } | null = null
+
+ipcMain.handle('minimize-window', () => {
+  if (!mainWindow) return
+  // Only save position on first minimize (ignore rapid double-clicks)
+  if (windowBeforeMinimize) return
+  const bounds = mainWindow.getBounds()
+  const orbSize = 100 // 64px orb + 24px padding each side
+  windowBeforeMinimize = { x: bounds.x, y: bounds.y }
+  // Shrink to orb corner (right edge of current position)
+  mainWindow.setBounds({ x: bounds.x + bounds.width - orbSize, y: bounds.y, width: orbSize, height: orbSize }, true)
+})
+
+ipcMain.handle('restore-window', () => {
+  if (!mainWindow) return
+  const pos = windowBeforeMinimize ?? { x: 0, y: 0 }
+  windowBeforeMinimize = null
+  mainWindow.setBounds({ x: pos.x, y: pos.y, width: 460, height: 720 }, true)
+})
 
 app.whenReady().then(() => {
   startPythonSidecar()

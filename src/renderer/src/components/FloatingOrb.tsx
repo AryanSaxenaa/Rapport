@@ -18,9 +18,16 @@ export function FloatingOrb() {
     else setOrbState('idle')
   }, [isRecording, activeBrief, briefLoading])
 
-  function toggleMinimized() {
+  async function toggleMinimized() {
     const store = useRapportStore.getState()
-    store.setMinimized(!store.minimized)
+    const next = !store.minimized
+    store.setMinimized(next)
+    // Resize the Electron window so it doesn't block the screen
+    if (next) {
+      await window.electron?.minimizeWindow?.()
+    } else {
+      await window.electron?.restoreWindow?.()
+    }
   }
 
   return (

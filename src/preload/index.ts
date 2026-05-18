@@ -7,7 +7,8 @@ const electronApi = {
     ipcRenderer.invoke('get-brief', payload),
   getContacts: () => ipcRenderer.invoke('get-contacts'),
   ingestEmails: () => ipcRenderer.invoke('ingest-emails'),
-  // App minimize/restore is handled client-side in FloatingOrb
+  minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
+  restoreWindow: () => ipcRenderer.invoke('restore-window'),
 }
 
 contextBridge.exposeInMainWorld('electron', electronApi)

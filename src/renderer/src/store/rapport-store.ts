@@ -36,6 +36,7 @@ type RapportState = {
   contacts: Contact[]
   contactsLoading: boolean
   contactsError: string | null
+  ingestingEmails: boolean
   minimized: boolean
   setRecording: (value: boolean) => void
   setSidecarStatus: (value: RapportState['sidecarStatus']) => void
@@ -47,6 +48,7 @@ type RapportState = {
   setDetectedContacts: (contacts: string[]) => void
   setSelectedContact: (contact: Contact) => void
   fetchContacts: () => Promise<void>
+  ingestEmails: () => Promise<void>
   fetchBrief: (contactEmail: string, contactName: string, company: string) => Promise<Brief | null>
 }
 
@@ -70,6 +72,7 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   contacts: [],
   contactsLoading: false,
   contactsError: null,
+  ingestingEmails: false,
 
   setRecording: (value) => set({ isRecording: value }),
   setSidecarStatus: (value) => set({ sidecarStatus: value }),
@@ -96,6 +99,19 @@ export const useRapportStore = create<RapportState>((set, get) => ({
       })
     } catch (err) {
       set({ contactsLoading: false, contactsError: String(err) })
+    }
+  },
+
+  ingestEmails: async () => {
+    set({ ingestingEmails: true })
+    try {
+      await window.electron?.ingestEmails?.()
+      // Refresh contacts immediately (endpoint returns what's available)
+      await get().fetchContacts()
+    } catch {
+      /* ingest errors are surfaced silently */
+    } finally {
+      set({ ingestingEmails: false })
     }
   },
 

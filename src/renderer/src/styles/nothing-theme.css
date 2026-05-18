@@ -55,6 +55,19 @@ button {
   min-height: 100dvh;
   padding: 18px;
   background: color-mix(in srgb, var(--n-bg) 94%, transparent);
+  transition: background 0.35s var(--ease-out-expo), padding 0.35s var(--ease-out-expo);
+}
+
+.rapport-shell.minimised {
+  background: transparent !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.rapport-shell.minimised .dot-field {
+  opacity: 0 !important;
+  transition: opacity 0.3s var(--ease-out-expo);
 }
 
 /* ---------- dot field ---------- */

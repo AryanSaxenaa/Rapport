@@ -1,0 +1,15 @@
+node_modules/
+out/
+dist/
+.env
+python-sidecar/.env
+python-sidecar/__pycache__/
+*.pyc
+*.log
+renderer-smoke.json
+renderer-smoke.png
+.vscode/mcp.json
+
+# Build playbook & demo script (internal docs, not for public repo)
+Playbook.md
+docs/DEMO_SCRIPT.md

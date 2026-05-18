@@ -1,0 +1,147 @@
+import asyncio
+from contextlib import suppress
+from typing import Any
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+
+from audio_capture import AudioCapture
+from calendar_poller import poll_for_upcoming_meetings
+from entity_extractor import extract_entities
+from gmail_reader import fetch_recent_emails
+from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb
+
+load_dotenv()
+
+app = FastAPI(title="Rapport Sidecar", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+connected_clients: list[WebSocket] = []
+recording_session: dict[str, Any] = {"active": False, "buffer": [], "contact": None, "capture": None}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "online", "service": "rapport-sidecar"}
+
+
+@app.websocket("/ws/transcript")
+async def transcript_ws(websocket: WebSocket):
+    await websocket.accept()
+    connected_clients.append(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        with suppress(ValueError):
+            connected_clients.remove(websocket)
+
+
+async def push_event(payload: dict[str, Any]):
+    for ws in connected_clients[:]:
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            with suppress(ValueError):
+                connected_clients.remove(ws)
+
+
+async def push_transcript(text: str):
+    await push_event({"type": "transcript", "text": text})
+
+
+@app.post("/recording/start")
+async def start_recording(body: dict[str, Any]):
+    recording_session["active"] = True
+    recording_session["contact"] = body
+    recording_session["buffer"] = []
+
+    async def on_text(text: str):
+        recording_session["buffer"].append(text)
+        await push_transcript(text)
+        if len(recording_session["buffer"]) % 5 == 0:
+            context_block = " ".join(recording_session["buffer"][-10:])
+            asyncio.create_task(_extract_and_store(context_block))
+
+    capture = AudioCapture(on_text)
+    recording_session["capture"] = capture
+    capture.start()
+    await push_transcript("Recording started. Waiting for audio chunks.")
+    return {"status": "recording"}
+
+
+async def _extract_and_store(text: str):
+    contact = recording_session.get("contact")
+    if not contact:
+        return
+
+    extracted = await extract_entities(text)
+    await write_interaction_to_hydradb(
+        contact_email=contact.get("contactEmail") or contact.get("contact_email"),
+        contact_name=contact.get("contactName") or contact.get("contact_name"),
+        company=contact.get("company"),
+        extracted=extracted,
+        interaction_type="call",
+        raw_text=text,
+    )
+
+
+@app.post("/recording/stop")
+async def stop_recording():
+    recording_session["active"] = False
+    capture = recording_session.get("capture")
+    if capture:
+        capture.stop()
+
+    if recording_session["buffer"] and recording_session["contact"]:
+        full_text = " ".join(recording_session["buffer"])
+        await _extract_and_store(full_text)
+
+    await push_transcript("Recording stopped. Session memory update queued.")
+    return {"status": "stopped"}
+
+
+@app.get("/brief/{contact_email}")
+async def get_brief(contact_email: str, contact_name: str, company: str):
+    return await generate_pre_call_brief(contact_email, contact_name, company)
+
+
+@app.post("/ingest/emails")
+async def ingest_emails_endpoint():
+    asyncio.create_task(ingest_emails_background())
+    return {"status": "ingestion started"}
+
+
+async def ingest_emails_background():
+    emails = fetch_recent_emails(days_back=90)
+    for email in emails:
+        contact = email.get("contact", {})
+        extracted = await extract_entities(email.get("body", ""))
+        await write_interaction_to_hydradb(
+            contact_email=contact.get("email", "unknown@example.com"),
+            contact_name=contact.get("name", "Unknown contact"),
+            company=contact.get("company", "Unknown company"),
+            extracted=extracted,
+            interaction_type="email",
+            raw_text=email.get("body", ""),
+        )
+
+
+@app.on_event("startup")
+async def startup():
+    async def on_upcoming_meeting(meeting_info: dict[str, Any]):
+        brief = await generate_pre_call_brief(
+            contact_email=meeting_info["contact_email"],
+            contact_name=meeting_info["contact_name"],
+            company=meeting_info["company"],
+        )
+        await push_event({"type": "brief", "data": {**brief, "trigger": "calendar"}})
+
+    asyncio.create_task(poll_for_upcoming_meetings(on_upcoming_meeting))

@@ -4,7 +4,7 @@
 
 Rapport is a desktop relationship-intelligence overlay that turns emails, calls, and meeting context into durable memory. It retrieves real contacts from HydraDB, visualizes relationship context, supports live call capture, and generates tactical pre-call briefs so users can walk into conversations with context instead of guesswork.
 
-![Rapport desktop overlay](renderer-smoke.png)
+<img width="1919" height="1026" alt="Screenshot 2026-05-18 220957" src="https://github.com/user-attachments/assets/584b05e1-6dc1-4e69-b320-54474d95212e" />
 
 ## Tagline
 

@@ -27,7 +27,7 @@ async def extract_entities(text: str) -> dict[str, Any]:
                 "X-Title": "Rapport",
             },
             json={
-                "model": "anthropic/claude-sonnet-4-5",
+                "models": ["openrouter/owl-alpha", "poolside/laguna-m.1:free"],
                 "temperature": 0.1,
                 "max_tokens": 1200,
                 "messages": [

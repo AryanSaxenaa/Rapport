@@ -124,7 +124,7 @@ communicationStyle, talkingPoints, landmines, lastInteraction, powerNote.
                 "X-Title": "Rapport",
             },
             json={
-                "model": "anthropic/claude-sonnet-4-5",
+                "models": ["openrouter/owl-alpha", "poolside/laguna-m.1:free"],
                 "temperature": 0.2,
                 "max_tokens": 1500,
                 "messages": [{"role": "user", "content": prompt}],

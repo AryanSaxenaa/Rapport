@@ -10,7 +10,8 @@ from audio_capture import AudioCapture
 from calendar_poller import poll_for_upcoming_meetings
 from entity_extractor import extract_entities
 from gmail_reader import fetch_recent_emails
-from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb
+from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb, recall_contact_context, TENANT_ID
+from hydradb_client import _hydradb_client, _sub_tenant_id, _with_retry, _to_plain_data
 
 load_dotenv()
 
@@ -106,6 +107,49 @@ async def stop_recording():
 
     await push_transcript("Recording stopped. Session memory update queued.")
     return {"status": "stopped"}
+
+
+@app.get("/contacts")
+async def list_contacts():
+    """Return stored contacts from HydraDB memory graph."""
+    client = _hydradb_client()
+    if not client:
+        return {"contacts": [], "source": "unavailable"}
+    try:
+        root_data = await _with_retry(
+            lambda: client.recall.full_recall(
+                tenant_id=TENANT_ID,
+                query="*",
+                max_results=20,
+                mode="thinking",
+                graph_context=True,
+                recency_bias=0.0,
+            )
+        )
+        root_plain = _to_plain_data(root_data)
+        memories = root_plain.get("memories") or root_plain.get("results") or []
+
+        contacts: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for mem in memories:
+            meta = mem.get("metadata") or {}
+            email = meta.get("contact_email", "")
+            if email and email not in seen:
+                seen.add(email)
+                contacts.append(
+                    {
+                        "contactEmail": email,
+                        "contactName": meta.get("contact_name", email.split("@")[0]),
+                        "company": meta.get("company", ""),
+                        "stance": meta.get("stance") or (extracted.get("stance", "neutral") if (extracted := mem.get("additional_metadata", {}).get("extracted", {})) else "neutral"),
+                        "lastInteraction": meta.get("interaction_date", ""),
+                        "topics": meta.get("topics_raised", []),
+                    }
+                )
+
+        return {"contacts": contacts, "source": "hydradb"}
+    except Exception as exc:
+        return {"contacts": [], "source": "error", "error": str(exc)}
 
 
 @app.get("/brief/{contact_email}")

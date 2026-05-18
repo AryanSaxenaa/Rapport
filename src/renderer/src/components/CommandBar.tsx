@@ -1,31 +1,33 @@
 import { useState } from 'react'
 import { Loader2, Search, X } from 'lucide-react'
-import { demoBrief, useRapportStore } from '../store/rapport-store'
+import { useRapportStore } from '../store/rapport-store'
 
 export function CommandBar({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('brief for mira.voss@northstar-ledger.example')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { selectedContact, setActiveBrief } = useRapportStore()
+  const { selectedContact, setActiveBrief, fetchBrief } = useRapportStore()
 
   async function runCommand() {
     setLoading(true)
     setError(null)
     try {
       if (query.toLowerCase().includes('brief')) {
-        const brief = await window.electron?.getBrief?.({
-          contactEmail: selectedContact.contactEmail,
-          contactName: selectedContact.contactName,
-          company: selectedContact.company
-        })
-        setActiveBrief(brief ?? demoBrief)
+        const brief = await fetchBrief(
+          selectedContact.contactEmail,
+          selectedContact.contactName,
+          selectedContact.company
+        )
+        if (!brief) {
+          setError('No brief available — try ingesting emails first or check the sidecar is running.')
+          return
+        }
         onClose()
         return
       }
-      setError('Try “brief for mira” or use the email ingest action.')
+      setError('Try "brief for [contact]" or use the email ingest action.')
     } catch {
-      setActiveBrief(demoBrief)
-      onClose()
+      setError('Sidecar request failed. Is the Python sidecar running on port 8765?')
     } finally {
       setLoading(false)
     }
@@ -43,6 +45,7 @@ export function CommandBar({ onClose }: { onClose: () => void }) {
             if (event.key === 'Enter') void runCommand()
             if (event.key === 'Escape') onClose()
           }}
+          placeholder="brief for [email]"
         />
         <button onClick={onClose} title="Close command bar">
           <X size={16} />

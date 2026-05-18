@@ -15,11 +15,13 @@ export type Brief = {
   powerNote: string
 }
 
-type Contact = {
+export type Contact = {
   contactEmail: string
   contactName: string
   company: string
   stance: Stance
+  lastInteraction?: string
+  topics?: string[]
 }
 
 type RapportState = {
@@ -27,57 +29,85 @@ type RapportState = {
   sidecarStatus: 'checking' | 'online' | 'offline'
   commandOpen: boolean
   activeBrief: Brief | null
+  briefLoading: boolean
   liveTranscript: string[]
   detectedContacts: string[]
   selectedContact: Contact
+  contacts: Contact[]
+  contactsLoading: boolean
+  contactsError: string | null
   setRecording: (value: boolean) => void
   setSidecarStatus: (value: RapportState['sidecarStatus']) => void
   setCommandOpen: (value: boolean) => void
   setActiveBrief: (brief: Brief | null) => void
+  setBriefLoading: (loading: boolean) => void
   pushTranscript: (line: string) => void
   setDetectedContacts: (contacts: string[]) => void
+  setSelectedContact: (contact: Contact) => void
+  fetchContacts: () => Promise<void>
+  fetchBrief: (contactEmail: string, contactName: string, company: string) => Promise<Brief | null>
 }
 
-export const demoBrief: Brief = {
+export const defaultContact: Contact = {
+  contactEmail: 'mira.voss@northstar-ledger.example',
   contactName: 'Mira Voss',
   company: 'Northstar Ledger',
-  currentStance: 'skeptic',
-  stanceShiftNote: 'Moved from neutral after procurement asked for a security review.',
-  topConcerns: ['Data retention policy', 'rollout workload for regional directors', 'budget timing before Q3 close'],
-  communicationStyle: 'Prefers compact written summaries with exact next steps and named owners.',
-  talkingPoints: [
-    'Lead with the revised retention controls.',
-    'Offer a phased rollout that protects the operations team.',
-    'Ask whether Priya still owns the security sign-off.'
-  ],
-  landmines: ['Do not frame this as a lightweight pilot.', 'Avoid mentioning competitive replacement until she raises it.'],
-  lastInteraction: 'Email thread, 2026-05-14: asked for proof that admins can export audit logs.',
-  powerNote: 'Priya Anand influences technical approval; Owen Keller controls final budget release.'
+  stance: 'neutral',
 }
 
-export const useRapportStore = create<RapportState>((set) => ({
+export const useRapportStore = create<RapportState>((set, get) => ({
   isRecording: false,
   sidecarStatus: 'checking',
   commandOpen: false,
   activeBrief: null,
-  liveTranscript: [
-    'Waiting for meeting audio.',
-    'Relationship signals will appear here as Rapport listens.'
-  ],
-  detectedContacts: ['Mira Voss', 'Priya Anand'],
-  selectedContact: {
-    contactEmail: 'mira.voss@northstar-ledger.example',
-    contactName: 'Mira Voss',
-    company: 'Northstar Ledger',
-    stance: 'skeptic'
-  },
+  briefLoading: false,
+  liveTranscript: ['Waiting for meeting audio.', 'Relationship signals will appear here as Rapport listens.'],
+  detectedContacts: [],
+  selectedContact: defaultContact,
+  contacts: [],
+  contactsLoading: false,
+  contactsError: null,
+
   setRecording: (value) => set({ isRecording: value }),
   setSidecarStatus: (value) => set({ sidecarStatus: value }),
   setCommandOpen: (value) => set({ commandOpen: value }),
   setActiveBrief: (brief) => set({ activeBrief: brief }),
+  setBriefLoading: (loading) => set({ briefLoading: loading }),
   pushTranscript: (line) =>
     set((state) => ({
-      liveTranscript: [...state.liveTranscript.slice(-7), line]
+      liveTranscript: [...state.liveTranscript.slice(-7), line],
     })),
-  setDetectedContacts: (contacts) => set({ detectedContacts: contacts })
+  setDetectedContacts: (contacts) => set({ detectedContacts: contacts }),
+  setSelectedContact: (contact) => set({ selectedContact: contact }),
+
+  fetchContacts: async () => {
+    set({ contactsLoading: true, contactsError: null })
+    try {
+      const data = await window.electron?.getContacts?.()
+      const list: Contact[] = data?.contacts ?? []
+      set({
+        contacts: list,
+        contactsLoading: false,
+        selectedContact: list.length > 0 ? list[0] : get().selectedContact,
+      })
+    } catch (err) {
+      set({ contactsLoading: false, contactsError: String(err) })
+    }
+  },
+
+  fetchBrief: async (contactEmail, contactName, company) => {
+    set({ briefLoading: true })
+    try {
+      const brief = await window.electron?.getBrief?.({ contactEmail, contactName, company })
+      if (brief) {
+        set({ activeBrief: brief, briefLoading: false })
+        return brief
+      }
+      set({ briefLoading: false })
+      return null
+    } catch {
+      set({ briefLoading: false })
+      return null
+    }
+  },
 }))

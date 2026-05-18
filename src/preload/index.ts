@@ -5,6 +5,7 @@ const electronApi = {
   stopRecording: () => ipcRenderer.invoke('stop-recording'),
   getBrief: (payload: { contactEmail: string; contactName: string; company: string }) =>
     ipcRenderer.invoke('get-brief', payload),
+  getContacts: () => ipcRenderer.invoke('get-contacts'),
   ingestEmails: () => ipcRenderer.invoke('ingest-emails'),
   send: (channel: 'toggle-command-bar') => ipcRenderer.send(channel),
   onToggleCommandBar: (callback: () => void) => {
@@ -12,7 +13,7 @@ const electronApi = {
     return () => {
       ipcRenderer.removeListener('toggle-command-bar', callback)
     }
-  }
+  },
 }
 
 contextBridge.exposeInMainWorld('electron', electronApi)

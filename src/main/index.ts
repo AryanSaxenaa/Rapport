@@ -127,6 +127,10 @@ ipcMain.handle('get-brief', async (_, payload: { contactEmail: string; contactNa
   return callSidecar(`/brief/${encodeURIComponent(payload.contactEmail)}?${params}`)
 })
 
+ipcMain.handle('get-contacts', async () => {
+  return callSidecar('/contacts')
+})
+
 ipcMain.handle('ingest-emails', async () => {
   return callSidecar('/ingest/emails', { method: 'POST' })
 })

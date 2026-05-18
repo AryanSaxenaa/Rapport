@@ -1,17 +1,23 @@
-import { Building2, MessageSquareText } from 'lucide-react'
-import type { Stance } from '../store/rapport-store'
-
-type Contact = {
-  contactEmail: string
-  contactName: string
-  company: string
-  stance: Stance
-}
+import { motion } from 'framer-motion'
+import { Building2, CalendarDays, MessageSquareText } from 'lucide-react'
+import type { Contact } from '../store/rapport-store'
 
 export function ContactCard({ contact }: { contact: Contact }) {
+  const initials = contact.contactName
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+
   return (
-    <section className="contact-card">
-      <div className="avatar-mark">{contact.contactName.split(' ').map((part) => part[0]).join('')}</div>
+    <motion.section
+      className="contact-card"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className="avatar-mark">{initials}</div>
       <div>
         <span className="micro-label">Primary contact</span>
         <h2>{contact.contactName}</h2>
@@ -23,8 +29,14 @@ export function ContactCard({ contact }: { contact: Contact }) {
           <MessageSquareText size={13} />
           {contact.contactEmail}
         </p>
+        {contact.lastInteraction && (
+          <p className="interaction-note">
+            <CalendarDays size={12} />
+            Last: {contact.lastInteraction}
+          </p>
+        )}
       </div>
       <span className={`stance-badge ${contact.stance}`}>{contact.stance}</span>
-    </section>
+    </motion.section>
   )
 }

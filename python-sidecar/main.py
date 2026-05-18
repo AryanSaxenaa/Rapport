@@ -15,6 +15,7 @@ from calendar_poller import poll_for_upcoming_meetings
 from entity_extractor import extract_entities
 from gmail_reader import fetch_recent_emails
 from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb, recall_contact_context, TENANT_ID
+from hydradb_client import demo_contacts, load_local_contacts
 from hydradb_client import _hydradb_client, _sub_tenant_id, _with_retry, _to_plain_data
 
 app = FastAPI(title="Rapport Sidecar", version="0.1.0")
@@ -114,15 +115,60 @@ async def stop_recording():
 @app.get("/contacts")
 async def list_contacts():
     """Return stored contacts from HydraDB memory graph."""
+    def add_contact(
+        contacts: list[dict[str, Any]],
+        seen: set[str],
+        contact: dict[str, Any],
+    ) -> None:
+        email = (contact.get("contactEmail") or contact.get("contact_email") or "").strip()
+        if not email or email.lower() in seen:
+            return
+        seen.add(email.lower())
+        contacts.append({
+            "contactEmail": email,
+            "contactName": contact.get("contactName") or contact.get("contact_name") or email.split("@")[0].replace(".", " ").title(),
+            "company": contact.get("company") or "",
+            "stance": contact.get("stance") or "neutral",
+            "lastInteraction": contact.get("lastInteraction") or contact.get("interaction_date") or "",
+            "topics": contact.get("topics") or contact.get("topics_raised") or [],
+        })
+
+    def contact_from_sub_id(sub_id: str) -> dict[str, Any]:
+        email = sub_id.replace("_at_", "@").replace("_", ".")
+        return {
+            "contactEmail": email,
+            "contactName": email.split("@")[0].replace(".", " ").title(),
+            "company": "",
+            "stance": "neutral",
+            "lastInteraction": "",
+            "topics": [],
+        }
+
+    def contact_from_sources(sub_id: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
+        contact = contact_from_sub_id(sub_id)
+        for src in sources:
+            meta = src.get("additional_metadata") or src.get("metadata") or {}
+            extracted = meta.get("extracted") if isinstance(meta.get("extracted"), dict) else {}
+            contact["contactEmail"] = contact["contactEmail"] if contact["contactEmail"] else meta.get("contact_email", "")
+            contact["contactName"] = meta.get("contact_name") or contact["contactName"]
+            contact["company"] = meta.get("company") or contact["company"]
+            contact["lastInteraction"] = meta.get("interaction_date") or contact["lastInteraction"]
+            contact["topics"] = meta.get("topics_raised") or extracted.get("topics") or contact["topics"]
+            contact["stance"] = meta.get("stance") or extracted.get("stance") or contact["stance"]
+        return contact
+
+    local_contacts = load_local_contacts()
     client = _hydradb_client()
     if not client:
-        return {"contacts": [], "source": "unavailable"}
+        return {"contacts": local_contacts or demo_contacts(), "source": "local" if local_contacts else "demo", "warning": "HydraDB API key is not configured."}
 
     contacts: list[dict[str, Any]] = []
     seen: set[str] = set()
+    for contact in local_contacts:
+        add_contact(contacts, seen, contact)
 
     try:
-        # Strategy 1: List all sub-tenants to discover contacts
+        # Get all sub-tenant IDs (1 call)
         try:
             sub_tenants = await _with_retry(
                 lambda: client.tenant.get_sub_tenant_ids(tenant_id=TENANT_ID)
@@ -132,88 +178,50 @@ async def list_contacts():
         except Exception:
             sub_ids = []
 
-        # Strategy 2: For each contact-like sub-tenant, recall preferences to get details
-        for sub_id in sub_ids:
-            if sub_id.startswith("_"):
-                continue  # skip internal sub-tenants
-            if sub_id in seen:
-                continue
-            seen.add(sub_id)
+        # Filter to contact-like sub-tenants (skip internal ones)
+        contact_sub_ids = [sid for sid in sub_ids if not sid.startswith("_")]
+
+        # Call recall_preferences on ALL sub-tenants IN PARALLEL with per-call timeout
+        async def recall_sub_tenant(sid: str) -> dict | None:
             try:
                 pref_data = await _with_retry(
-                    lambda sid=sub_id: client.recall.recall_preferences(
+                    lambda s=sid: client.recall.recall_preferences(
                         tenant_id=TENANT_ID,
-                        sub_tenant_id=sid,
+                        sub_tenant_id=s,
                         query="contact",
                         max_results=3,
-                        mode="thinking",
+                        mode="fast",
                         graph_context=False,
                         recency_bias=0.0,
                     )
                 )
-                pref_plain = _to_plain_data(pref_data)
-                chunks = pref_plain.get("chunks") or []
-                sources = pref_plain.get("sources") or []
-
-                # Build source lookup
-                source_map = {s.get("id"): s for s in sources if s.get("id")}
-
-                email = ""
-                name = ""
-                company = ""
-                last_interaction = ""
-                topics = []
-
-                # Extract from sources (has additional_metadata)
-                for src in sources:
-                    meta = src.get("additional_metadata") or {}
-                    if not email:
-                        email = meta.get("contact_email", "") or sub_id.replace("_at_", "@").replace("_", ".")
-                    if not name:
-                        name = meta.get("contact_name", "")
-                    if not company:
-                        company = meta.get("company", "")
-                    if not last_interaction:
-                        last_interaction = meta.get("interaction_date", "")
-                    if not topics:
-                        topics = meta.get("topics_raised", [])
-
-                # Fallback: extract email from sub-tenant ID
-                if not email:
-                    email = sub_id.replace("_at_", "@").replace("_", ".")
-                if not name:
-                    name = email.split("@")[0].replace(".", " ").title()
-
-                if email not in seen:
-                    seen.add(email)
-                    contacts.append({
-                        "contactEmail": email,
-                        "contactName": name,
-                        "company": company,
-                        "stance": "neutral",
-                        "lastInteraction": last_interaction,
-                        "topics": topics,
-                    })
+                return _to_plain_data(pref_data)
             except Exception:
-                # Fallback: just use sub-tenant ID as contact identifier
-                email = sub_id.replace("_at_", "@").replace("_", ".")
-                if email not in seen:
-                    seen.add(email)
-                    contacts.append({
-                        "contactEmail": email,
-                        "contactName": email.split("@")[0].replace(".", " ").title(),
-                        "company": "",
-                        "stance": "neutral",
-                        "lastInteraction": "",
-                        "topics": [],
-                    })
+                return None
 
-        # Strategy 3: Try full_recall for any remaining contacts not in sub-tenant list
-        if len(contacts) < 5:
-            for q in ["contact", "email", "meeting", "interaction"]:
+        if contact_sub_ids:
+            # Use gather with a timeout per task
+            results = await asyncio.gather(
+                *(recall_sub_tenant(sid) for sid in contact_sub_ids),
+                return_exceptions=True,
+            )
+
+            for sub_id, result in zip(contact_sub_ids, results):
+                if sub_id.lower() in seen:
+                    continue
+                if isinstance(result, Exception) or not result:
+                    add_contact(contacts, seen, contact_from_sub_id(sub_id))
+                    continue
+
+                pref_plain = result
+                sources = pref_plain.get("sources") or []
+                add_contact(contacts, seen, contact_from_sources(sub_id, sources))
+
+        if len(contacts) < 2:
+            for query in ("contact", "email interaction", "meeting transcript"):
                 try:
                     root_data = await _with_retry(
-                        lambda q=q: client.recall.full_recall(
+                        lambda q=query: client.recall.full_recall(
                             tenant_id=TENANT_ID,
                             query=q,
                             max_results=20,
@@ -226,28 +234,29 @@ async def list_contacts():
                     chunks = root_plain.get("chunks") or []
                     sources = root_plain.get("sources") or []
                     source_map = {s.get("id"): s for s in sources if s.get("id")}
-
                     for chunk in chunks:
                         source_id = chunk.get("source_id") or chunk.get("id")
-                        src = source_map.get(source_id, {})
-                        meta = src.get("additional_metadata") or {}
-                        email = meta.get("contact_email", "")
-                        if email and email not in seen:
-                            seen.add(email)
-                            contacts.append({
-                                "contactEmail": email,
-                                "contactName": meta.get("contact_name", email.split("@")[0]),
-                                "company": meta.get("company", ""),
-                                "stance": meta.get("stance", "neutral"),
-                                "lastInteraction": meta.get("interaction_date", ""),
-                                "topics": meta.get("topics_raised", []),
-                            })
+                        source = source_map.get(source_id, {})
+                        meta = source.get("additional_metadata") or source.get("metadata") or {}
+                        if not meta and isinstance(chunk.get("metadata"), dict):
+                            meta = chunk["metadata"]
+                        add_contact(contacts, seen, {
+                            "contactEmail": meta.get("contact_email", ""),
+                            "contactName": meta.get("contact_name", ""),
+                            "company": meta.get("company", ""),
+                            "stance": meta.get("stance", "neutral"),
+                            "lastInteraction": meta.get("interaction_date", ""),
+                            "topics": meta.get("topics_raised", []),
+                        })
                 except Exception:
                     pass
 
-        return {"contacts": contacts, "source": "hydradb"}
+        if contacts:
+            return {"contacts": contacts, "source": "hydradb"}
+        return {"contacts": demo_contacts(), "source": "demo", "warning": "No contacts were found in HydraDB yet."}
     except Exception as exc:
-        return {"contacts": [], "source": "error", "error": str(exc)}
+        fallback = local_contacts or demo_contacts()
+        return {"contacts": fallback, "source": "local" if local_contacts else "demo", "error": str(exc)}
 
 
 @app.get("/brief/{contact_email}")

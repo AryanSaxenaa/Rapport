@@ -1,62 +1,49 @@
 # Rapport
 
-**Relationship intelligence for every professional conversation, powered by HydraDB.**
+**AI relationship memory for every important conversation, powered by HydraDB.**
 
-Rapport is a desktop companion that turns meetings, email threads, and calendar context into a living relationship memory. It sits as a minimal floating overlay, listens during calls, captures decision signals, and generates pre-call briefs that explain who matters, what changed, what risks are active, and what to say next.
-
-The product is designed to show HydraDB at its best: long-lived memory, contextual recall, entity-rich relationship graphs, and sub-tenant isolation for per-contact intelligence.
+Rapport is a desktop relationship-intelligence overlay that turns emails, calls, and meeting context into durable memory. It retrieves real contacts from HydraDB, visualizes relationship context, supports live call capture, and generates tactical pre-call briefs so users can walk into conversations with context instead of guesswork.
 
 ![Rapport desktop overlay](renderer-smoke.png)
 
-## Why This Exists
+## Tagline
 
-Modern revenue, partnerships, investing, recruiting, and customer-success work depends on relationship context that is scattered across calls, inboxes, notes, and calendars. CRM fields capture what happened. Rapport captures what it means.
+AI relationship memory that turns emails and calls into live context for better conversations.
 
-Rapport answers questions like:
+## What It Does
 
-- Is this person a champion, skeptic, neutral evaluator, or blocker?
-- Who influences the actual decision?
-- What concerns have repeated across multiple interactions?
-- What changed since the last call?
-- What should I avoid saying in the next meeting?
-- What is the most useful next move?
+Relationship context is usually scattered across inboxes, meeting notes, CRM fields, and memory. Rapport brings that context into a compact desktop companion:
+
+- Loads real contacts from HydraDB memory.
+- Shows each contact's stance, company, email, topics, and last interaction.
+- Visualizes the relationship network with a D3 graph.
+- Ingests email context and writes extracted relationship signals into HydraDB.
+- Starts live capture for calls and stores important conversation signals.
+- Generates pre-call briefs with talking points, concerns, landmines, and next steps.
+- Falls back gracefully to local/demo contacts when HydraDB is not configured, so the app remains demoable.
 
 ## Why HydraDB
 
-HydraDB is the core memory layer, not an interchangeable database.
+HydraDB is the core memory layer for Rapport. The app uses it to store relationship observations and recall them later across sessions.
 
-Rapport uses HydraDB because the product needs:
+Rapport uses HydraDB for:
 
-- **Memories** for per-contact behavioral observations and preference signals.
-- **Knowledge** for transcripts, emails, and account history.
-- **Recall** across both personal memory and broader company context.
-- **Sub-tenants** to isolate relationship intelligence by contact or workspace.
-- **Context graph potential** for mapping influence, decision roles, concerns, and commitments.
-- **Typed SDK integration** through the official Python SDK in the FastAPI sidecar.
+- Per-contact memory through sub-tenant isolation.
+- Durable interaction history from email and call capture.
+- Contextual recall through `recall_preferences` and `full_recall`.
+- Relationship graph discovery from stored memory sources.
+- A practical long-context workflow where memory changes the UI, not just a chat response.
 
-This is exactly the kind of agentic application where HydraDB becomes more than storage: it becomes the continuity layer.
-
-## Current Build
-
-Implemented in this repository:
-
-- Electron desktop shell
-- React renderer with a Nothing OS-inspired floating UI
-- FastAPI Python sidecar
-- Official `hydradb-sdk` integration via `AsyncHydraDB`
-- HydraDB memory writes for call/email interactions
-- Parallel recall strategy using `recall_preferences` and `full_recall`
-- OpenRouter hooks for extraction, transcription, and brief generation
-- Gmail and Calendar extension points
-- D3 relationship graph visualization
-- Playwright smoke test for the renderer
+The short version: **HydraDB remembers the relationship. Rapport helps you act on it.**
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   UI["Electron + React Overlay"] <--> IPC["Electron IPC"]
+  UI --> DIRECT["Browser Dev Fallback"]
   IPC <--> API["FastAPI Sidecar"]
+  DIRECT --> API
   API --> HYDRA["HydraDB Memories + Recall"]
   API --> LLM["OpenRouter LLMs"]
   API --> GMAIL["Gmail API"]
@@ -67,73 +54,104 @@ flowchart LR
   GRAPH --> UI
 ```
 
-## HydraDB Flow
+## Built With
 
-1. Meeting transcript or email content is normalized into an interaction.
-2. An LLM extracts relationship signals: stance, topics, commitments, decision roles, and risks.
-3. Rapport writes a memory through `AsyncHydraDB.upload.add_memory`.
-4. Before a meeting, Rapport recalls both:
-   - `recall_preferences` for per-contact behavioral memory
-   - `full_recall` for wider account knowledge
-5. The brief generator converts recalled context into a tactical pre-call brief.
-
-See [docs/HYDRADB_INTEGRATION.md](docs/HYDRADB_INTEGRATION.md) for the deeper integration notes.
+- Electron
+- React
+- TypeScript
+- Vite
+- Python
+- FastAPI
+- HydraDB
+- D3
+- OpenRouter
+- Gmail API extension points
 
 ## Quick Start
+
+Install dependencies:
 
 ```powershell
 npm install
 python -m pip install -r python-sidecar/requirements.txt
-npm run dev
 ```
 
-For sidecar-only development:
-
-```powershell
-npm run sidecar
-npm exec vite -- src/renderer --host 127.0.0.1 --port 5173
-```
-
-## Environment
-
-Copy `.env.example` to `.env` and set:
+Create `.env` from `.env.example` and set your keys:
 
 ```env
 HYDRA_DB_API_KEY=...
-HYDRA_DB_TENANT_ID=mq66nfnt5t
-HYDRADB_TENANT_ID=mq66nfnt5t
+HYDRA_DB_TENANT_ID=...
+HYDRADB_TENANT_ID=...
 OPENROUTER_API_KEY=...
-EXTRACTION_MODEL=openrouter/owl-alpha,poolside/laguna-m.1:free
-BRIEF_MODEL=openrouter/owl-alpha,poolside/laguna-m.1:free
 MY_EMAIL=you@example.com
 ```
 
-Model env vars accept comma-separated lists for automatic fallback ordering (`primary,fallback1,fallback2`).
+Run the desktop app:
+
+```powershell
+npm run dev
+```
+
+If port `5173` is busy, Electron Vite will choose another renderer port automatically.
+
+Run only the Python sidecar:
+
+```powershell
+npm run sidecar
+```
+
+Check the contacts endpoint:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8765/contacts | ConvertTo-Json -Depth 5
+```
 
 ## Verification
 
 ```powershell
 npm run build
+```
+
+Optional renderer smoke test, once the Vite renderer is running:
+
+```powershell
 node scripts\smoke-renderer.mjs
 ```
 
-Verified locally:
+## Demo Flow
 
-- TypeScript/Electron production build passes
-- Python sidecar imports compile
-- Renderer smoke test passes
-- `renderer-smoke.png` is generated for visual review
+For a hackathon demo:
+
+1. Start the app with `npm run dev`.
+2. Show the status pill and `Source: hydradb`.
+3. Click through real contact chips.
+4. Show the selected contact card and stance.
+5. Show the relationship graph.
+6. Click `Ingest` to demonstrate the memory write path.
+7. Click `Start`, then `End`, to show live capture.
+8. Click `Memory`, type `brief`, and run the pre-call brief workflow.
+
+See [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the full voiceover script.
+
+## Project Structure
+
+```text
+src/main/              Electron main process and sidecar orchestration
+src/preload/           Secure Electron IPC bridge
+src/renderer/          React UI and relationship graph
+python-sidecar/        FastAPI app, HydraDB integration, ingestion, recall
+docs/                  Pitch, architecture, setup, and integration notes
+scripts/               Renderer smoke test
+```
 
 ## Documentation
 
+- [Demo Script](docs/DEMO_SCRIPT.md)
 - [Product Pitch](docs/PITCH.md)
 - [HydraDB Integration](docs/HYDRADB_INTEGRATION.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [Demo Script](docs/DEMO_SCRIPT.md)
 - [Setup Guide](docs/SETUP.md)
 
-## Pitch Summary
+## Submission Summary
 
-Rapport is a showcase for HydraDB-powered product memory. It demonstrates how a desktop AI application can move beyond ephemeral chat and build durable, structured, relationship-aware context over time.
-
-The short version: **HydraDB remembers the relationship. Rapport helps you act on it.**
+Rapport is an AI-powered relationship memory overlay. It uses HydraDB to store and recall context from emails and conversations, then surfaces contacts, relationship graphs, and pre-call briefs in a live desktop UI.

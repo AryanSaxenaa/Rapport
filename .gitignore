@@ -4,6 +4,7 @@ dist/
 .env
 python-sidecar/.env
 python-sidecar/__pycache__/
+python-sidecar/rapport_contacts.json
 *.pyc
 *.log
 renderer-smoke.json

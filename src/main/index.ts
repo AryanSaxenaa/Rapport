@@ -16,8 +16,25 @@ function appRoot() {
   return isDev ? process.cwd() : app.getAppPath()
 }
 
-function startPythonSidecar() {
+async function isSidecarHealthy() {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 1200)
+  try {
+    const response = await fetch(`${sidecarUrl}/health`, { signal: controller.signal })
+    return response.ok
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function startPythonSidecar() {
   if (pythonProcess) return
+  if (await isSidecarHealthy()) {
+    if (isDev) console.log('[Python] Reusing existing sidecar on 127.0.0.1:8765')
+    return
+  }
 
   const sidecarDir = path.join(appRoot(), 'python-sidecar')
   const pythonCommand = process.platform === 'win32' ? 'python' : 'python3'
@@ -100,11 +117,17 @@ function createTray() {
 }
 
 async function callSidecar(pathname: string, init?: RequestInit) {
-  const response = await fetch(`${sidecarUrl}${pathname}`, init)
-  if (!response.ok) {
-    throw new Error(`Sidecar ${response.status}: ${await response.text()}`)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15000)
+  try {
+    const response = await fetch(`${sidecarUrl}${pathname}`, { ...init, signal: controller.signal })
+    if (!response.ok) {
+      throw new Error(`Sidecar ${response.status}: ${await response.text()}`)
+    }
+    return response.json()
+  } finally {
+    clearTimeout(timeout)
   }
-  return response.json()
 }
 
 ipcMain.handle('start-recording', async (_, contact) => {
@@ -155,8 +178,8 @@ ipcMain.handle('restore-window', () => {
   mainWindow.setBounds({ x: pos.x, y: pos.y, width: 460, height: 720 }, true)
 })
 
-app.whenReady().then(() => {
-  startPythonSidecar()
+app.whenReady().then(async () => {
+  await startPythonSidecar()
   createWindow()
   createTray()
 })

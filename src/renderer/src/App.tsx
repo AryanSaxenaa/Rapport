@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Activity, Database, Mail, Radio, RefreshCw, Users } from 'lucide-react'
 import { CommandBar } from './components/CommandBar'
@@ -17,6 +17,8 @@ export function App() {
     selectedContact,
     contacts,
     contactsLoading,
+    contactsError,
+    contactsSource,
     ingestingEmails,
     setCommandOpen,
     setSidecarStatus,
@@ -27,27 +29,86 @@ export function App() {
     ingestEmails,
   } = useRapportStore()
 
-  // Fetch contacts on mount
-  useEffect(() => {
-    fetchContacts()
-  }, [fetchContacts])
+  // WebSocket connection with auto-reconnect
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
 
-  // WebSocket connection
-  useEffect(() => {
-    const ws = new WebSocket('ws://127.0.0.1:8765/ws/transcript')
-    ws.onopen = () => setSidecarStatus('online')
-    ws.onerror = () => setSidecarStatus('offline')
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data)
-        if (payload.type === 'transcript') pushTranscript(payload.text)
-        if (payload.type === 'brief') setActiveBrief(payload.data)
-      } catch {
-        /* ignore malformed frames */
+  const connectWebSocket = useCallback(() => {
+    // Clean up any existing connection
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+
+    try {
+      const ws = new WebSocket('ws://127.0.0.1:8765/ws/transcript')
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        setSidecarStatus('online')
+        // Refresh contacts when we reconnect
+        fetchContacts()
+        // Clear any reconnect timer since we're connected
+        if (reconnectTimer.current) {
+          clearTimeout(reconnectTimer.current)
+          reconnectTimer.current = null
+        }
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data)
+          if (payload.type === 'transcript') pushTranscript(payload.text)
+          if (payload.type === 'brief') setActiveBrief(payload.data)
+        } catch {
+          /* ignore malformed frames */
+        }
+      }
+
+      ws.onerror = () => {
+        setSidecarStatus('offline')
+      }
+
+      ws.onclose = () => {
+        setSidecarStatus('offline')
+        wsRef.current = null
+        // Schedule reconnect
+        if (!reconnectTimer.current) {
+          reconnectTimer.current = setTimeout(() => {
+            reconnectTimer.current = null
+            connectWebSocket()
+          }, 3000)
+        }
+      }
+    } catch {
+      setSidecarStatus('offline')
+      // Schedule reconnect on error too
+      if (!reconnectTimer.current) {
+        reconnectTimer.current = setTimeout(() => {
+          reconnectTimer.current = null
+          connectWebSocket()
+        }, 3000)
       }
     }
-    return () => ws.close()
-  }, [pushTranscript, setActiveBrief, setSidecarStatus])
+  }, [fetchContacts, pushTranscript, setActiveBrief, setSidecarStatus])
+
+  useEffect(() => {
+    connectWebSocket()
+    return () => {
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current)
+        reconnectTimer.current = null
+      }
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
+  }, [connectWebSocket])
+
+  useEffect(() => {
+    void fetchContacts()
+  }, [fetchContacts])
 
   // Build graph nodes/links from contacts
   const graphData = useMemo(() => {
@@ -95,6 +156,13 @@ export function App() {
 
         <div className="scan-line" />
 
+        {contactsSource && (
+          <div className={`data-banner ${contactsError ? 'warn' : ''}`}>
+            <span>{contactsSource ? `Source: ${contactsSource}` : 'Source: unknown'}</span>
+            {contactsError && <span>{contactsError}</span>}
+          </div>
+        )}
+
         {contactsLoading ? (
           <div className="loading-drawer">
             <RefreshCw size={16} className="spin" />
@@ -139,8 +207,8 @@ export function App() {
             </div>
             <p className="panel-copy">
               {isRecording
-                ? 'Listening for stance shifts, commitments, and political context.'
-                : 'Start a call capture or generate a brief from known context.'}
+                ? 'Listening for stance shifts and commitments.'
+                : 'Start a call capture or generate a brief.'}
             </p>
             <div className="action-row">
               <motion.button
@@ -153,7 +221,7 @@ export function App() {
                 }}
               >
                 <Radio size={15} />
-                Record
+                Start
               </motion.button>
               <motion.button
                 className="secondary-action"
@@ -164,7 +232,7 @@ export function App() {
                   useRapportStore.getState().setRecording(false)
                 }}
               >
-                Stop
+                End
               </motion.button>
             </div>
           </section>
@@ -181,7 +249,7 @@ export function App() {
             style={{ opacity: ingestingEmails ? 0.6 : 1 }}
           >
             {ingestingEmails ? <RefreshCw size={14} className="spin" /> : <Mail size={14} />}
-            <span>{ingestingEmails ? 'Ingesting…' : 'Ingest email'}</span>
+            <span>{ingestingEmails ? 'Ingesting…' : 'Ingest'}</span>
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.03 }}
@@ -189,7 +257,7 @@ export function App() {
             onClick={() => setCommandOpen(true)}
           >
             <Database size={14} />
-            <span>Query memory</span>
+            <span>Memory</span>
           </motion.button>
         </footer>
       </section>}

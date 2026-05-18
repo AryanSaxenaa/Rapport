@@ -24,6 +24,78 @@ export type Contact = {
   topics?: string[]
 }
 
+type ContactsResponse = {
+  contacts?: Contact[]
+  source?: 'hydradb' | 'local' | 'demo' | string
+  warning?: string
+  error?: string
+}
+
+const SIDECAR_URL = 'http://127.0.0.1:8765'
+
+const demoContacts: Contact[] = [
+  {
+    contactEmail: 'mira.voss@northstar-ledger.example',
+    contactName: 'Mira Voss',
+    company: 'Northstar Ledger',
+    stance: 'skeptic',
+    lastInteraction: new Date().toISOString().slice(0, 10),
+    topics: ['security review', 'rollout workload', 'budget timing'],
+  },
+  {
+    contactEmail: 'jon.bell@apexfoundry.example',
+    contactName: 'Jon Bell',
+    company: 'Apex Foundry',
+    stance: 'champion',
+    lastInteraction: new Date().toISOString().slice(0, 10),
+    topics: ['pilot scope', 'executive sponsor'],
+  },
+]
+
+const normalizeContactsResponse = (data?: ContactsResponse): ContactsResponse => {
+  const contacts = data?.contacts?.filter((contact) => contact.contactEmail && contact.contactName) ?? []
+  if (contacts.length > 0) return { ...data, contacts }
+
+  return {
+    contacts: demoContacts,
+    source: data?.source ?? 'demo',
+    warning: data?.warning ?? data?.error ?? 'Showing demo contacts because no stored contacts were returned yet.',
+  }
+}
+
+const sidecarRequest = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const response = await fetch(`${SIDECAR_URL}${path}`, init)
+  if (!response.ok) {
+    throw new Error(`Sidecar ${response.status}: ${await response.text()}`)
+  }
+  return response.json() as Promise<T>
+}
+
+const getContacts = async (): Promise<ContactsResponse> => {
+  if (window.electron?.getContacts) {
+    return window.electron.getContacts()
+  }
+  return sidecarRequest<ContactsResponse>('/contacts')
+}
+
+const ingestEmails = async (): Promise<unknown> => {
+  if (window.electron?.ingestEmails) {
+    return window.electron.ingestEmails()
+  }
+  return sidecarRequest('/ingest/emails', { method: 'POST' })
+}
+
+const getBrief = async (payload: { contactEmail: string; contactName: string; company: string }): Promise<Brief> => {
+  if (window.electron?.getBrief) {
+    return window.electron.getBrief(payload)
+  }
+  const params = new URLSearchParams({
+    contact_name: payload.contactName,
+    company: payload.company,
+  })
+  return sidecarRequest<Brief>(`/brief/${encodeURIComponent(payload.contactEmail)}?${params}`)
+}
+
 type RapportState = {
   isRecording: boolean
   sidecarStatus: 'checking' | 'online' | 'offline'
@@ -36,6 +108,7 @@ type RapportState = {
   contacts: Contact[]
   contactsLoading: boolean
   contactsError: string | null
+  contactsSource: string | null
   ingestingEmails: boolean
   minimized: boolean
   setRecording: (value: boolean) => void
@@ -72,6 +145,7 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   contacts: [],
   contactsLoading: false,
   contactsError: null,
+  contactsSource: null,
   ingestingEmails: false,
 
   setRecording: (value) => set({ isRecording: value }),
@@ -90,22 +164,31 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   fetchContacts: async () => {
     set({ contactsLoading: true, contactsError: null })
     try {
-      const data = await window.electron?.getContacts?.()
-      const list: Contact[] = data?.contacts ?? []
+      const data = await getContacts()
+      const normalized = normalizeContactsResponse(data)
+      const list: Contact[] = normalized.contacts ?? demoContacts
       set({
         contacts: list,
         contactsLoading: false,
+        contactsSource: normalized.source ?? null,
+        contactsError: normalized.error ?? normalized.warning ?? null,
         selectedContact: list.length > 0 ? list[0] : defaultContact,
       })
     } catch (err) {
-      set({ contactsLoading: false, contactsError: String(err) })
+      set({
+        contacts: demoContacts,
+        contactsLoading: false,
+        contactsSource: 'demo',
+        contactsError: `Could not reach sidecar. Showing demo contacts. ${String(err)}`,
+        selectedContact: demoContacts[0],
+      })
     }
   },
 
   ingestEmails: async () => {
     set({ ingestingEmails: true })
     try {
-      await window.electron?.ingestEmails?.()
+      await ingestEmails()
       // Refresh contacts immediately (endpoint returns what's available)
       await get().fetchContacts()
     } catch {
@@ -118,7 +201,7 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   fetchBrief: async (contactEmail, contactName, company) => {
     set({ briefLoading: true })
     try {
-      const brief = await window.electron?.getBrief?.({ contactEmail, contactName, company })
+      const brief = await getBrief({ contactEmail, contactName, company })
       if (brief) {
         set({ activeBrief: brief, briefLoading: false })
         return brief

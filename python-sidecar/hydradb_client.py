@@ -2,6 +2,7 @@ import os
 import asyncio
 import json
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -20,6 +21,7 @@ _BRIEF_MODELS = [
     for m in (os.getenv("BRIEF_MODEL") or "openrouter/owl-alpha,poolside/laguna-m.1:free").split(",")
     if m.strip()
 ]
+LOCAL_CONTACTS_PATH = Path(__file__).parent / "rapport_contacts.json"
 
 
 def _sub_tenant_id(contact_email: str | None) -> str:
@@ -31,6 +33,68 @@ def _hydradb_client() -> AsyncHydraDB | None:
     if not API_KEY:
         return None
     return AsyncHydraDB(token=API_KEY)
+
+
+def _normalise_contact(contact: dict[str, Any]) -> dict[str, Any]:
+    email = (contact.get("contactEmail") or contact.get("contact_email") or "").strip()
+    name = (contact.get("contactName") or contact.get("contact_name") or "").strip()
+    company = (contact.get("company") or "").strip()
+    return {
+        "contactEmail": email,
+        "contactName": name or (email.split("@")[0].replace(".", " ").title() if email else "Unknown contact"),
+        "company": company,
+        "stance": contact.get("stance") or "neutral",
+        "lastInteraction": contact.get("lastInteraction") or contact.get("interaction_date") or "",
+        "topics": contact.get("topics") or contact.get("topics_raised") or [],
+    }
+
+
+def load_local_contacts() -> list[dict[str, Any]]:
+    if not LOCAL_CONTACTS_PATH.exists():
+        return []
+    try:
+        raw = json.loads(LOCAL_CONTACTS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    contacts = raw if isinstance(raw, list) else raw.get("contacts", [])
+    return [_normalise_contact(c) for c in contacts if isinstance(c, dict)]
+
+
+def save_local_contact(contact: dict[str, Any]) -> None:
+    normalised = _normalise_contact(contact)
+    if not normalised["contactEmail"]:
+        return
+
+    contacts = load_local_contacts()
+    by_email = {c["contactEmail"].lower(): c for c in contacts}
+    existing = by_email.get(normalised["contactEmail"].lower(), {})
+    by_email[normalised["contactEmail"].lower()] = {**existing, **normalised}
+
+    LOCAL_CONTACTS_PATH.write_text(
+        json.dumps({"contacts": list(by_email.values())}, indent=2),
+        encoding="utf-8",
+    )
+
+
+def demo_contacts() -> list[dict[str, Any]]:
+    return [
+        {
+            "contactEmail": "mira.voss@northstar-ledger.example",
+            "contactName": "Mira Voss",
+            "company": "Northstar Ledger",
+            "stance": "skeptic",
+            "lastInteraction": date.today().isoformat(),
+            "topics": ["security review", "rollout workload", "budget timing"],
+        },
+        {
+            "contactEmail": "jon.bell@apexfoundry.example",
+            "contactName": "Jon Bell",
+            "company": "Apex Foundry",
+            "stance": "champion",
+            "lastInteraction": date.today().isoformat(),
+            "topics": ["pilot scope", "executive sponsor"],
+        },
+    ]
 
 
 async def _with_retry(operation, max_retries: int = 3):
@@ -78,6 +142,14 @@ async def write_interaction_to_hydradb(
         "topics_raised": extracted.get("topics", []),
         "sentiment_shift": extracted.get("sentiment_shift"),
     }
+    save_local_contact({
+        "contactEmail": contact_email or "",
+        "contactName": contact_name or "",
+        "company": company or "",
+        "stance": extracted.get("stance") or "neutral",
+        "lastInteraction": metadata["interaction_date"],
+        "topics": metadata["topics_raised"],
+    })
 
     if not API_KEY:
         return {"status": "skipped", "reason": "HYDRA_DB_API_KEY missing", "content": content, "metadata": metadata}

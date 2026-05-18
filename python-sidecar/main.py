@@ -3,6 +3,10 @@ from contextlib import suppress
 from typing import Any
 
 from dotenv import load_dotenv
+
+# Load .env BEFORE any local imports that read env vars
+load_dotenv(override=True)
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,8 +16,6 @@ from entity_extractor import extract_entities
 from gmail_reader import fetch_recent_emails
 from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb, recall_contact_context, TENANT_ID
 from hydradb_client import _hydradb_client, _sub_tenant_id, _with_retry, _to_plain_data
-
-load_dotenv()
 
 app = FastAPI(title="Rapport Sidecar", version="0.1.0")
 app.add_middleware(

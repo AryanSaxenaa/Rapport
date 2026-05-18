@@ -29,8 +29,11 @@ export function FloatingOrb() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.84, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-            onClick={() => window.electron?.send?.('toggle-command-bar')}
-            title="Open command bar"
+            onClick={() => {
+              const store = useRapportStore.getState()
+              store.setCommandOpen(!store.commandOpen)
+            }}
+            title="Toggle command bar"
           >
             <span>R</span>
             <i />
@@ -58,7 +61,10 @@ export function FloatingOrb() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.94 }}
             transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-            onClick={() => window.electron?.send?.('toggle-command-bar')}
+            onClick={() => {
+              const store = useRapportStore.getState()
+              store.setCommandOpen(!store.commandOpen)
+            }}
           >
             <div className="live-head">
               <span className="rec-dot" />

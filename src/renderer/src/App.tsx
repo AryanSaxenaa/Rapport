@@ -24,15 +24,6 @@ export function App() {
     setSelectedContact,
   } = useRapportStore()
 
-  // Listen for orb toggle from main process
-  useEffect(() => {
-    const cleanup = window.electron?.onToggleCommandBar?.(() => {
-      const current = useRapportStore.getState().commandOpen
-      setCommandOpen(!current)
-    })
-    return cleanup
-  }, [setCommandOpen])
-
   // Fetch contacts on mount
   useEffect(() => {
     fetchContacts()

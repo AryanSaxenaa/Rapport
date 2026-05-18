@@ -9,7 +9,7 @@ from hydra_db import AsyncHydraDB
 from hydra_db.core import ApiError
 
 
-TENANT_ID = os.getenv("HYDRA_DB_TENANT_ID") or os.getenv("HYDRADB_TENANT_ID") or "mq66nfnt5t"
+TENANT_ID = os.getenv("HYDRA_DB_TENANT_ID") or os.getenv("HYDRADB_TENANT_ID") or "orb"
 API_KEY = os.getenv("HYDRA_DB_API_KEY") or os.getenv("HYDRADB_API_KEY")
 RETRYABLE_STATUS_CODES = {429, 500, 503}
 

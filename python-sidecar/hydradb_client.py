@@ -218,11 +218,32 @@ def _to_plain_data(value: Any) -> Any:
 
 
 def _format_recall_context(prefs: Any, knowledge: Any) -> str:
-    payload = {
-        "preferences": _to_plain_data(prefs),
-        "knowledge": _to_plain_data(knowledge),
-    }
-    return json.dumps(payload, default=str, indent=2)[:12000]
+    """Extract clean text from HydraDB's chunk/source response format."""
+    lines = []
+    lines.append("=== PREFERENCES & STANCE ===")
+    prefs_plain = _to_plain_data(prefs)
+    prefs_chunks = prefs_plain.get("chunks") or []
+    for c in prefs_chunks:
+        text = c.get("chunk_content") or c.get("text", "")
+        score = c.get("relevancy_score", "")
+        if text:
+            lines.append(f"  [relevancy={score}] {text[:500]}")
+    if not prefs_chunks:
+        lines.append("  (no preferences data)")
+
+    lines.append("")
+    lines.append("=== KNOWLEDGE & CONTEXT ===")
+    know_plain = _to_plain_data(knowledge)
+    know_chunks = know_plain.get("chunks") or []
+    for c in know_chunks:
+        text = c.get("chunk_content") or c.get("text", "")
+        score = c.get("relevancy_score", "")
+        if text:
+            lines.append(f"  [relevancy={score}] {text[:500]}")
+    if not know_chunks:
+        lines.append("  (no knowledge data)")
+
+    return "\n".join(lines)[:12000]
 
 
 def fallback_brief(contact_name: str, company: str, context: str) -> dict[str, Any]:

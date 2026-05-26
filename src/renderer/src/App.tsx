@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, Database, Mail, Radio, RefreshCw, Users } from 'lucide-react'
+import { Activity, Database, Mail, Radio, RefreshCw, Upload, Users } from 'lucide-react'
 import { CommandBar } from './components/CommandBar'
 import { ContactCard } from './components/ContactCard'
 import { FloatingOrb } from './components/FloatingOrb'
@@ -28,6 +28,9 @@ export function App() {
     setSelectedContact,
     ingestEmails,
   } = useRapportStore()
+
+  const [dragOver, setDragOver] = useState(false)
+  const [fileIngestStatus, setFileIngestStatus] = useState<string | null>(null)
 
   // WebSocket connection with auto-reconnect
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -110,7 +113,7 @@ export function App() {
     void fetchContacts()
   }, [fetchContacts])
 
-  // Build graph nodes/links from contacts
+  // Build graph nodes only — edges come from /graph endpoint (semantic, evidence-backed)
   const graphData = useMemo(() => {
     if (contacts.length === 0) return { nodes: [], links: [] }
     const nodes = contacts.map((c, i) => ({
@@ -121,21 +124,45 @@ export function App() {
       type: 'person' as const,
       group: i,
     }))
-
-    const links = []
-    for (let i = 0; i < nodes.length - 1; i++) {
-      links.push({
-        source: nodes[i].id,
-        target: nodes[i + 1].id,
-        type: 'relates',
-        strength: 1,
-      })
-    }
-    return { nodes, links }
+    return { nodes, links: [] }
   }, [contacts])
 
+  async function handleFileDrop(event: React.DragEvent<HTMLElement>) {
+    event.preventDefault()
+    setDragOver(false)
+    const files = Array.from(event.dataTransfer.files).filter(
+      (f) => f.name.endsWith('.eml') || f.name.endsWith('.mbox')
+    )
+    if (files.length === 0) {
+      setFileIngestStatus('Only .eml and .mbox files are supported.')
+      return
+    }
+    setFileIngestStatus(`Ingesting ${files.length} file${files.length > 1 ? 's' : ''}…`)
+    let total = 0
+    for (const file of files) {
+      const form = new FormData()
+      form.append('file', file)
+      try {
+        const res = await fetch('http://127.0.0.1:8765/ingest/file', { method: 'POST', body: form })
+        const data = await res.json() as { count?: number }
+        total += data.count ?? 0
+      } catch {
+        setFileIngestStatus('Ingest failed — is the sidecar running?')
+        return
+      }
+    }
+    setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
+    setTimeout(() => setFileIngestStatus(null), 4000)
+    void fetchContacts()
+  }
+
   return (
-    <main className={`rapport-shell${minimized ? ' minimised' : ''}`}>
+    <main
+      className={`rapport-shell${minimized ? ' minimised' : ''}${dragOver ? ' drag-over' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => void handleFileDrop(e)}
+    >
       <div className="dot-field" />
       {!minimized && <section className="control-surface">
         <header className="topbar">
@@ -240,6 +267,19 @@ export function App() {
 
         <RelationshipGraph nodes={graphData.nodes} links={graphData.links} />
 
+        {fileIngestStatus && (
+          <div className={`data-banner${fileIngestStatus.includes('failed') || fileIngestStatus.includes('supported') ? ' warn' : ''}`}>
+            <span>{fileIngestStatus}</span>
+          </div>
+        )}
+
+        {dragOver && (
+          <div className="drop-overlay">
+            <Upload size={24} />
+            <span>Drop .eml or .mbox to ingest</span>
+          </div>
+        )}
+
         <footer className="footer-actions">
           <motion.button
             whileHover={{ scale: 1.03 }}
@@ -247,9 +287,46 @@ export function App() {
             disabled={ingestingEmails}
             onClick={() => void ingestEmails()}
             style={{ opacity: ingestingEmails ? 0.6 : 1 }}
+            title="Ingest via Gmail OAuth (requires credentials.json)"
           >
             {ingestingEmails ? <RefreshCw size={14} className="spin" /> : <Mail size={14} />}
             <span>{ingestingEmails ? 'Ingesting…' : 'Ingest'}</span>
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => {
+              const input = document.createElement('input')
+              input.type = 'file'
+              input.accept = '.eml,.mbox'
+              input.multiple = true
+              input.onchange = async () => {
+                const files = Array.from(input.files ?? [])
+                if (!files.length) return
+                setFileIngestStatus(`Ingesting ${files.length} file${files.length > 1 ? 's' : ''}…`)
+                let total = 0
+                for (const file of files) {
+                  const form = new FormData()
+                  form.append('file', file)
+                  try {
+                    const res = await fetch('http://127.0.0.1:8765/ingest/file', { method: 'POST', body: form })
+                    const data = await res.json() as { count?: number }
+                    total += data.count ?? 0
+                  } catch {
+                    setFileIngestStatus('Ingest failed — is the sidecar running?')
+                    return
+                  }
+                }
+                setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
+                setTimeout(() => setFileIngestStatus(null), 4000)
+                void fetchContacts()
+              }
+              input.click()
+            }}
+            title="Import .eml or .mbox files — no account needed"
+          >
+            <Upload size={14} />
+            <span>Import</span>
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.03 }}

@@ -7,12 +7,13 @@ from dotenv import load_dotenv
 # Load .env BEFORE any local imports that read env vars
 load_dotenv(override=True)
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from audio_capture import AudioCapture
+from audio_capture import AudioCapture, RecordingDisabled
 from calendar_poller import poll_for_upcoming_meetings
-from entity_extractor import extract_entities
+from email_file_reader import parse_eml, parse_mbox
+from entity_extractor import extract_entities, has_meaningful_extraction
 from gmail_reader import fetch_recent_emails
 from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb, recall_contact_context, TENANT_ID
 from hydradb_client import demo_contacts, load_local_contacts
@@ -61,8 +62,24 @@ async def push_transcript(text: str):
     await push_event({"type": "transcript", "text": text})
 
 
+async def push_error(message: str):
+    await push_event({"type": "error", "message": message})
+
+
+def _on_task_error(task: asyncio.Task) -> None:
+    """Log and push exceptions from fire-and-forget background tasks."""
+    exc = task.exception() if not task.cancelled() else None
+    if exc:
+        asyncio.create_task(push_error(f"Background task failed: {exc}"))
+
+
 @app.post("/recording/start")
 async def start_recording(body: dict[str, Any]):
+    try:
+        AudioCapture.check_available()
+    except RecordingDisabled as exc:
+        return {"status": "disabled", "reason": str(exc)}
+
     recording_session["active"] = True
     recording_session["contact"] = body
     recording_session["buffer"] = []
@@ -72,12 +89,13 @@ async def start_recording(body: dict[str, Any]):
         await push_transcript(text)
         if len(recording_session["buffer"]) % 5 == 0:
             context_block = " ".join(recording_session["buffer"][-10:])
-            asyncio.create_task(_extract_and_store(context_block))
+            task = asyncio.create_task(_extract_and_store(context_block))
+            task.add_done_callback(_on_task_error)
 
     capture = AudioCapture(on_text)
     recording_session["capture"] = capture
     capture.start()
-    await push_transcript("Recording started. Waiting for audio chunks.")
+    await push_transcript("Recording started.")
     return {"status": "recording"}
 
 
@@ -87,6 +105,9 @@ async def _extract_and_store(text: str):
         return
 
     extracted = await extract_entities(text)
+    if not has_meaningful_extraction(extracted):
+        return
+
     await write_interaction_to_hydradb(
         contact_email=contact.get("contactEmail") or contact.get("contact_email"),
         contact_name=contact.get("contactName") or contact.get("contact_name"),
@@ -106,9 +127,10 @@ async def stop_recording():
 
     if recording_session["buffer"] and recording_session["contact"]:
         full_text = " ".join(recording_session["buffer"])
-        await _extract_and_store(full_text)
+        task = asyncio.create_task(_extract_and_store(full_text))
+        task.add_done_callback(_on_task_error)
 
-    await push_transcript("Recording stopped. Session memory update queued.")
+    await push_transcript("Recording stopped. Processing final chunk.")
     return {"status": "stopped"}
 
 
@@ -168,7 +190,6 @@ async def list_contacts():
         add_contact(contacts, seen, contact)
 
     try:
-        # Get all sub-tenant IDs (1 call)
         try:
             sub_tenants = await _with_retry(
                 lambda: client.tenant.get_sub_tenant_ids(tenant_id=TENANT_ID)
@@ -178,10 +199,8 @@ async def list_contacts():
         except Exception:
             sub_ids = []
 
-        # Filter to contact-like sub-tenants (skip internal ones)
         contact_sub_ids = [sid for sid in sub_ids if not sid.startswith("_")]
 
-        # Call recall_preferences on ALL sub-tenants IN PARALLEL with per-call timeout
         async def recall_sub_tenant(sid: str) -> dict | None:
             try:
                 pref_data = await _with_retry(
@@ -200,7 +219,6 @@ async def list_contacts():
                 return None
 
         if contact_sub_ids:
-            # Use gather with a timeout per task
             results = await asyncio.gather(
                 *(recall_sub_tenant(sid) for sid in contact_sub_ids),
                 return_exceptions=True,
@@ -213,8 +231,7 @@ async def list_contacts():
                     add_contact(contacts, seen, contact_from_sub_id(sub_id))
                     continue
 
-                pref_plain = result
-                sources = pref_plain.get("sources") or []
+                sources = result.get("sources") or []
                 add_contact(contacts, seen, contact_from_sources(sub_id, sources))
 
         if len(contacts) < 2:
@@ -264,25 +281,84 @@ async def get_brief(contact_email: str, contact_name: str, company: str):
     return await generate_pre_call_brief(contact_email, contact_name, company)
 
 
+@app.post("/ingest/file")
+async def ingest_file_endpoint(file: UploadFile = File(...)):
+    """Ingest a .eml or .mbox file. No auth required."""
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".eml") or filename.endswith(".mbox")):
+        raise HTTPException(status_code=400, detail="Only .eml and .mbox files are supported.")
+
+    data = await file.read()
+    if filename.endswith(".eml"):
+        parsed = parse_eml(data)
+        emails = [parsed] if parsed else []
+    else:
+        emails = parse_mbox(data)
+
+    if not emails:
+        return {"status": "no_emails", "count": 0}
+
+    task = asyncio.create_task(_ingest_email_list(emails))
+    task.add_done_callback(_on_task_error)
+    return {"status": "ingestion started", "count": len(emails)}
+
+
+async def _ingest_email_list(emails: list[dict[str, Any]]) -> None:
+    sem = asyncio.Semaphore(5)
+
+    async def process_one(email_item: dict[str, Any]) -> None:
+        async with sem:
+            contact = email_item.get("contact", {})
+            extracted = await extract_entities(email_item.get("body", ""))
+            if not has_meaningful_extraction(extracted):
+                return
+            await write_interaction_to_hydradb(
+                contact_email=contact.get("email", ""),
+                contact_name=contact.get("name", ""),
+                company=contact.get("company", ""),
+                extracted=extracted,
+                interaction_type="email",
+                raw_text=email_item.get("body", ""),
+            )
+
+    tasks = [asyncio.create_task(process_one(e)) for e in emails]
+    for t in tasks:
+        t.add_done_callback(_on_task_error)
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await push_event({"type": "ingest_complete", "count": len(emails)})
+
+
 @app.post("/ingest/emails")
 async def ingest_emails_endpoint():
-    asyncio.create_task(ingest_emails_background())
+    task = asyncio.create_task(ingest_emails_background())
+    task.add_done_callback(_on_task_error)
     return {"status": "ingestion started"}
 
 
 async def ingest_emails_background():
     emails = fetch_recent_emails(days_back=90)
-    for email in emails:
-        contact = email.get("contact", {})
-        extracted = await extract_entities(email.get("body", ""))
-        await write_interaction_to_hydradb(
-            contact_email=contact.get("email", "unknown@example.com"),
-            contact_name=contact.get("name", "Unknown contact"),
-            company=contact.get("company", "Unknown company"),
-            extracted=extracted,
-            interaction_type="email",
-            raw_text=email.get("body", ""),
-        )
+    sem = asyncio.Semaphore(5)
+
+    async def process_one(email: dict[str, Any]) -> None:
+        async with sem:
+            contact = email.get("contact", {})
+            extracted = await extract_entities(email.get("body", ""))
+            if not has_meaningful_extraction(extracted):
+                return
+            await write_interaction_to_hydradb(
+                contact_email=contact.get("email", "unknown@example.com"),
+                contact_name=contact.get("name", "Unknown contact"),
+                company=contact.get("company", "Unknown company"),
+                extracted=extracted,
+                interaction_type="email",
+                raw_text=email.get("body", ""),
+            )
+
+    tasks = [asyncio.create_task(process_one(e)) for e in emails]
+    for t in tasks:
+        t.add_done_callback(_on_task_error)
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await push_event({"type": "ingest_complete", "count": len(emails)})
 
 
 @app.on_event("startup")

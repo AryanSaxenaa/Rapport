@@ -85,7 +85,7 @@ button {
   position: relative;
   display: grid;
   gap: 12px;
-  width: min(100%, 426px);
+  width: 100%;
   min-height: calc(100dvh - 28px);
   padding: 14px;
   border: 1px solid var(--n-border);
@@ -878,6 +878,31 @@ button:active {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------- drag-and-drop ---------- */
+.rapport-shell.drag-over .control-surface {
+  border-color: var(--n-accent);
+  box-shadow: inset 0 0 0 2px var(--n-accent);
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--n-bg) 88%, transparent);
+  border: 2px dashed var(--n-accent);
+  color: var(--n-accent);
+  font-family: var(--font-header);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  z-index: 10;
 }
 
 /* ---------- responsive ---------- */

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { CheckCircle, ExternalLink, Key, Loader2 } from 'lucide-react'
 import { useRapportStore } from '../store/rapport-store'
 import type { SidecarStatus_Deps } from '../store/rapport-store'
+import './FirstRunWizard.css'
 
 export function FirstRunWizard({ depStatus, onComplete }: { depStatus: SidecarStatus_Deps; onComplete: () => void }) {
   const { configureSidecar } = useRapportStore()

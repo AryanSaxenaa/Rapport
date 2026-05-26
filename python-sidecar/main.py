@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 # Load .env BEFORE any local imports that read env vars
 load_dotenv(override=True)
@@ -104,17 +104,11 @@ async def configure(body: dict[str, Any]):
     if not updates:
         return {"status": "no_changes"}
 
-    existing: dict[str, str] = {}
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if "=" in line and not line.startswith("#"):
-                k, v = line.split("=", 1)
-                existing[k.strip()] = v.strip()
-
+    existing: dict[str, str | None] = dotenv_values(env_path) if env_path.exists() else {}
     existing.update(updates)
+    entries = {k: v for k, v in existing.items() if v is not None}
     env_path.write_text(
-        "\n".join(f"{k}={v}" for k, v in existing.items()) + "\n",
+        "\n".join(f"{k}={v}" for k, v in entries.items()) + "\n",
         encoding="utf-8",
     )
     load_dotenv(env_path, override=True)

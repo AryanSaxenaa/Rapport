@@ -10,6 +10,7 @@ from typing import Any
 from hydradb_client import (
     TENANT_ID,
     _hydradb_client,
+    _normalize_contact,
     _to_plain_data,
     _with_retry,
     load_local_contacts,
@@ -18,22 +19,13 @@ from hydradb_client import (
 
 
 def normalize_contact(meta: dict[str, Any], fallback_email: str = "") -> dict[str, Any]:
-    """Canonical contact shape from any metadata dict."""
-    extracted = meta.get("extracted") if isinstance(meta.get("extracted"), dict) else {}
-    email = (meta.get("contact_email") or meta.get("contactEmail") or fallback_email).strip()
-    name = (meta.get("contact_name") or meta.get("contactName") or "").strip()
-    return {
-        "contactEmail": email,
-        "contactName": name or (email.split("@")[0].replace(".", " ").title() if email else "Unknown"),
-        "company": (meta.get("company") or "").strip(),
-        "stance": meta.get("stance") or extracted.get("stance") or "neutral",
-        "lastInteraction": meta.get("interaction_date") or meta.get("lastInteraction") or "",
-        "topics": meta.get("topics_raised") or extracted.get("topics") or [],
-        "sentimentShift": meta.get("sentiment_shift") or extracted.get("sentiment_shift") or "",
-        "commitments": extracted.get("commitments") or [],
-        "unresolved": extracted.get("unresolved") or [],
-        "summary": extracted.get("summary") or "",
-    }
+    """Canonical contact shape from any metadata dict. Delegates to hydradb_client."""
+    extracted = meta.get("extracted")
+    extracted = extracted if isinstance(extracted, dict) else {}
+    flat: dict[str, Any] = {**extracted, **meta}
+    if fallback_email and not (flat.get("contactEmail") or flat.get("contact_email")):
+        flat["contact_email"] = fallback_email
+    return _normalize_contact(flat)
 
 
 def _add_contact(contacts: list[dict[str, Any]], seen: set[str], contact: dict[str, Any]) -> None:

@@ -3,31 +3,11 @@
 import email
 import email.policy
 import mailbox
-import re
 from email.message import Message
-from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any
 
-
-class _Tagger(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self._parts: list[str] = []
-
-    def handle_data(self, data: str) -> None:
-        self._parts.append(data)
-
-    def get_text(self) -> str:
-        return " ".join(self._parts)
-
-
-def _strip_html(html_content: str) -> str:
-    tagger = _Tagger()
-    tagger.feed(html_content)
-    text = tagger.get_text()
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+from html_utils import strip_html
 
 
 def _extract_body(msg: Message) -> str:
@@ -64,7 +44,7 @@ def _extract_body(msg: Message) -> str:
     if plain:
         return plain[:8000]
     if html_body:
-        return _strip_html(html_body)[:8000]
+        return strip_html(html_body)[:8000]
     return ""
 
 

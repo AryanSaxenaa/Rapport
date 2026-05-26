@@ -9,7 +9,6 @@ python-sidecar/rapport_contacts.json
 *.log
 renderer-smoke.json
 renderer-smoke.png
-.vscode/mcp.json
 
 # Credentials & tokens (sensitive — never commit)
 credentials.json
@@ -20,3 +19,4 @@ python-sidecar/credentials.json
 # Build playbook & demo script (internal docs, not for public repo)
 Playbook.md
 docs/DEMO_SCRIPT.md
+

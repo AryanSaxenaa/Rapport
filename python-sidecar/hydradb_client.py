@@ -35,7 +35,7 @@ def _hydradb_client() -> AsyncHydraDB | None:
     return AsyncHydraDB(token=API_KEY)
 
 
-def _normalise_contact(contact: dict[str, Any]) -> dict[str, Any]:
+def _normalize_contact(contact: dict[str, Any]) -> dict[str, Any]:
     email = (contact.get("contactEmail") or contact.get("contact_email") or "").strip()
     name = (contact.get("contactName") or contact.get("contact_name") or "").strip()
     company = (contact.get("company") or "").strip()
@@ -61,11 +61,11 @@ def load_local_contacts() -> list[dict[str, Any]]:
     except Exception:
         return []
     contacts = raw if isinstance(raw, list) else raw.get("contacts", [])
-    return [_normalise_contact(c) for c in contacts if isinstance(c, dict)]
+    return [_normalize_contact(c) for c in contacts if isinstance(c, dict)]
 
 
 def save_local_contact(contact: dict[str, Any]) -> None:
-    normalised = _normalise_contact(contact)
+    normalised = _normalize_contact(contact)
     if not normalised["contactEmail"]:
         return
 

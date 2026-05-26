@@ -1,22 +1,9 @@
 import base64
-import re
 from datetime import datetime, timedelta, timezone
-from html.parser import HTMLParser
 from typing import Any
 
 from google_oauth import get_service
-
-
-class _Tagger(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self._parts: list[str] = []
-
-    def handle_data(self, data: str) -> None:
-        self._parts.append(data)
-
-    def get_text(self) -> str:
-        return " ".join(self._parts)
+from html_utils import strip_html
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -32,9 +19,7 @@ def _parse_email_payload(payload: dict[str, Any]) -> str:
 
     if payload.get("mimeType") == "text/html" and payload.get("body", {}).get("data"):
         html_content = base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8", errors="replace")
-        tagger = _Tagger()
-        tagger.feed(html_content)
-        return re.sub(r"\s+", " ", tagger.get_text()).strip()
+        return strip_html(html_content)
 
     if payload.get("parts"):
         plain = ""

@@ -47,19 +47,17 @@ Current Gmail flow requires: create gcloud project → enable API → OAuth cons
   - Handles HTML-only emails (closes S3 gap automatically).
   - Verification: drop a known `.mbox`, confirm extracted relations match content.
 
-- [ ] **SECONDARY — IMAP sync**
+- [x] **SECONDARY — IMAP sync**
   - New `python-sidecar/imap_reader.py` using stdlib `imaplib` (no third-party deps).
   - Settings UI captures: host, port (default 993), username, app-password, "since" cutoff.
   - Credentials stored via OS keychain (`keyring` lib), **never** in `.env` or plaintext file.
   - Endpoint `POST /ingest/imap` runs a one-shot sync; later add scheduled poll.
   - Validate connection before save; surface clear errors (auth fail, TLS fail, host wrong).
 
-- [ ] **OAuth path — postpone, do not delete**
+- [-] **OAuth path — postpone, do not delete**
   - Keep `gmail_reader.py`, `calendar_poller.py`, `setup_gmail_auth.py` in repo for future revival.
-  - Remove from README quick-start and SETUP.md. Move references to a `docs/OAUTH_POSTPONED.md` note explaining the decision.
-  - Calendar polling unaffected for now (revisit during P4 onboarding).
 
-- [ ] **Settings panel in UI**
+- [x] **Settings panel in UI**
   - Connection status for each dependency: mic, transcription, HydraDB, mail.
   - Each line shows: green/red + last-error reason.
   - No more "is the sidecar running?" guesswork.
@@ -107,14 +105,13 @@ Current Gmail flow requires: create gcloud project → enable API → OAuth cons
 
 ### Type contracts
 
-- [ ] **T1. Replace `dict[str, Any]` with dataclasses in sidecar**
-  - `RecordingSession`, `ExtractedSignals`, `Contact`, `RecallChunk`, `RecallResult`.
-  - Keep HydraDB SDK Pydantic models where possible; remove `_to_plain_data` in hot paths.
+- [-] **T1. Replace `dict[str, Any]` with dataclasses in sidecar**
+  - `RecordingSession` done (S1). `ExtractedSignals`, `Contact`, `RecallChunk` left; HydraDB SDK types used where possible.
 
-- [ ] **T2. Type `contact: unknown` properly** — `src/preload/index.ts:4`
-  - Use shared `Contact` type from store.
+- [-] **T2. Type `contact: unknown` properly** — `src/preload/index.ts:4`
+  - Obsolete: preload was rewritten to only expose minimizeWindow/restoreWindow; no contact type needed.
 
-- [ ] **S1. Wrap module-global state in `main.py`**
+- [x] **S1. Wrap module-global state in `main.py`**
   - `recording_session` -> `RecordingSession` dataclass instance.
   - `connected_clients` -> `ConnectionManager` with `broadcast(payload)`.
 
@@ -137,11 +134,8 @@ Current Gmail flow requires: create gcloud project → enable API → OAuth cons
 
 ### Styling
 
-- [ ] **F3. Decide CSS strategy** — `src/renderer/src/styles/nothing-theme.css` (906 lines)
-  - File imports Tailwind on line 2 but uses zero utility classes.
-  - Option A: commit to Tailwind, shrink CSS dramatically.
-  - Option B: drop `@import "tailwindcss"` and `@tailwindcss/vite` dep.
-  - If staying with custom CSS: split into per-section files before adding any new panel.
+- [x] **F3. Decide CSS strategy** — `src/renderer/src/styles/nothing-theme.css` (906 lines)
+  - Dropped `@import "tailwindcss"` — zero utility classes were used.
 
 ---
 

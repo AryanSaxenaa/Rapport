@@ -1,5 +1,7 @@
 import asyncio
+import os
 from contextlib import suppress
+from dataclasses import dataclass, field
 from typing import Any
 
 from dotenv import load_dotenv
@@ -16,8 +18,54 @@ from contact_repository import fetch_contacts as _fetch_contacts
 from email_file_reader import parse_eml, parse_mbox
 from entity_extractor import extract_entities, has_meaningful_extraction
 from gmail_reader import fetch_recent_emails
-from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb, _hydradb_client
+from hydradb_client import (
+    API_KEY as HYDRADB_API_KEY,
+    generate_pre_call_brief,
+    write_interaction_to_hydradb,
+    _hydradb_client,
+)
+from imap_reader import fetch_via_imap, ImapAuthError, ImapConnectionError
 from relationship_graph import build_graph, store_relations
+
+
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
+
+class ConnectionManager:
+    def __init__(self) -> None:
+        self._clients: list[WebSocket] = []
+
+    def add(self, ws: WebSocket) -> None:
+        self._clients.append(ws)
+
+    def remove(self, ws: WebSocket) -> None:
+        with suppress(ValueError):
+            self._clients.remove(ws)
+
+    async def broadcast(self, payload: dict[str, Any]) -> None:
+        for ws in self._clients[:]:
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                self.remove(ws)
+
+
+@dataclass
+class RecordingSession:
+    active: bool = False
+    buffer: list[str] = field(default_factory=list)
+    contact: dict[str, Any] | None = None
+    capture: Any | None = None
+
+
+_clients = ConnectionManager()
+_session = RecordingSession()
+
+
+# ---------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------
 
 app = FastAPI(title="Rapport Sidecar", version="0.1.0")
 app.add_middleware(
@@ -28,50 +76,66 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-connected_clients: list[WebSocket] = []
-recording_session: dict[str, Any] = {"active": False, "buffer": [], "contact": None, "capture": None}
-
 
 @app.get("/health")
 async def health():
     return {"status": "online", "service": "rapport-sidecar"}
 
 
+@app.get("/status")
+async def get_status():
+    """Return per-dependency availability for the settings panel."""
+    mic_ok, mic_reason = _check_mic()
+    return {
+        "hydradb": {"ok": bool(HYDRADB_API_KEY), "reason": None if HYDRADB_API_KEY else "HYDRA_DB_API_KEY not set"},
+        "openrouter": {"ok": bool(os.getenv("OPENROUTER_API_KEY")), "reason": None if os.getenv("OPENROUTER_API_KEY") else "OPENROUTER_API_KEY not set"},
+        "microphone": {"ok": mic_ok, "reason": mic_reason},
+        "imap": {"ok": True, "reason": "Provide host/credentials to sync"},
+    }
+
+
+def _check_mic() -> tuple[bool, str | None]:
+    try:
+        import sounddevice as sd
+        devices = sd.query_devices()
+        has_input = any(d.get("max_input_channels", 0) > 0 for d in devices)
+        return (True, None) if has_input else (False, "No input devices found")
+    except Exception as exc:
+        return False, str(exc)
+
+
 @app.websocket("/ws/transcript")
 async def transcript_ws(websocket: WebSocket):
     await websocket.accept()
-    connected_clients.append(websocket)
+    _clients.add(websocket)
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        with suppress(ValueError):
-            connected_clients.remove(websocket)
+        _clients.remove(websocket)
 
 
-async def push_event(payload: dict[str, Any]):
-    for ws in connected_clients[:]:
-        try:
-            await ws.send_json(payload)
-        except Exception:
-            with suppress(ValueError):
-                connected_clients.remove(ws)
+async def _push(payload: dict[str, Any]) -> None:
+    await _clients.broadcast(payload)
 
 
-async def push_transcript(text: str):
-    await push_event({"type": "transcript", "text": text})
+async def _push_transcript(text: str) -> None:
+    await _push({"type": "transcript", "text": text})
 
 
-async def push_error(message: str):
-    await push_event({"type": "error", "message": message})
+async def _push_error(message: str) -> None:
+    await _push({"type": "error", "message": message})
 
 
 def _on_task_error(task: asyncio.Task) -> None:
-    """Log and push exceptions from fire-and-forget background tasks."""
     exc = task.exception() if not task.cancelled() else None
     if exc:
-        asyncio.create_task(push_error(f"Background task failed: {exc}"))
+        asyncio.create_task(_push_error(f"Background task failed: {exc}"))
 
+
+# ---------------------------------------------------------------------------
+# Recording
+# ---------------------------------------------------------------------------
 
 @app.post("/recording/start")
 async def start_recording(body: dict[str, Any]):
@@ -80,36 +144,33 @@ async def start_recording(body: dict[str, Any]):
     except RecordingDisabled as exc:
         return {"status": "disabled", "reason": str(exc)}
 
-    recording_session["active"] = True
-    recording_session["contact"] = body
-    recording_session["buffer"] = []
+    _session.active = True
+    _session.contact = body
+    _session.buffer = []
 
     async def on_text(text: str):
-        recording_session["buffer"].append(text)
-        await push_transcript(text)
-        if len(recording_session["buffer"]) % 5 == 0:
-            context_block = " ".join(recording_session["buffer"][-10:])
-            task = asyncio.create_task(_extract_and_store(context_block))
+        _session.buffer.append(text)
+        await _push_transcript(text)
+        if len(_session.buffer) % 5 == 0:
+            task = asyncio.create_task(_extract_and_store(" ".join(_session.buffer[-10:])))
             task.add_done_callback(_on_task_error)
 
-    capture = AudioCapture(on_text)
-    recording_session["capture"] = capture
-    capture.start()
-    await push_transcript("Recording started.")
+    _session.capture = AudioCapture(on_text)
+    _session.capture.start()
+    await _push_transcript("Recording started.")
     return {"status": "recording"}
 
 
-async def _extract_and_store(text: str):
-    contact = recording_session.get("contact")
+async def _extract_and_store(text: str) -> None:
+    contact = _session.contact
     if not contact:
         return
-
     extracted = await extract_entities(text)
     if not has_meaningful_extraction(extracted):
         return
-
+    contact_email = contact.get("contactEmail") or contact.get("contact_email")
     await write_interaction_to_hydradb(
-        contact_email=contact.get("contactEmail") or contact.get("contact_email"),
+        contact_email=contact_email,
         contact_name=contact.get("contactName") or contact.get("contact_name"),
         company=contact.get("company"),
         extracted=extracted,
@@ -119,33 +180,33 @@ async def _extract_and_store(text: str):
     client = _hydradb_client()
     if client:
         with suppress(Exception):
-            await store_relations(
-                client,
-                extracted.get("relations") or [],
-                contact.get("contactEmail") or contact.get("contact_email"),
-            )
+            await store_relations(client, extracted.get("relations") or [], contact_email)
 
 
 @app.post("/recording/stop")
 async def stop_recording():
-    recording_session["active"] = False
-    capture = recording_session.get("capture")
-    if capture:
-        capture.stop()
-
-    if recording_session["buffer"] and recording_session["contact"]:
-        full_text = " ".join(recording_session["buffer"])
-        task = asyncio.create_task(_extract_and_store(full_text))
+    _session.active = False
+    if _session.capture:
+        _session.capture.stop()
+    if _session.buffer and _session.contact:
+        task = asyncio.create_task(_extract_and_store(" ".join(_session.buffer)))
         task.add_done_callback(_on_task_error)
-
-    await push_transcript("Recording stopped. Processing final chunk.")
+    await _push_transcript("Recording stopped. Processing final chunk.")
     return {"status": "stopped"}
 
 
+# ---------------------------------------------------------------------------
+# Contacts / Graph / Brief
+# ---------------------------------------------------------------------------
+
 @app.get("/contacts")
 async def list_contacts():
-    """Return stored contacts from HydraDB memory graph."""
     return await _fetch_contacts()
+
+
+@app.get("/graph")
+async def get_graph():
+    return await build_graph()
 
 
 @app.get("/brief/{contact_email}")
@@ -153,19 +214,49 @@ async def get_brief(contact_email: str, contact_name: str, company: str):
     return await generate_pre_call_brief(contact_email, contact_name, company)
 
 
+# ---------------------------------------------------------------------------
+# Ingestion
+# ---------------------------------------------------------------------------
+
 @app.post("/ingest/file")
 async def ingest_file_endpoint(file: UploadFile = File(...)):
-    """Ingest a .eml or .mbox file. No auth required."""
     filename = (file.filename or "").lower()
     if not (filename.endswith(".eml") or filename.endswith(".mbox")):
         raise HTTPException(status_code=400, detail="Only .eml and .mbox files are supported.")
-
     data = await file.read()
-    if filename.endswith(".eml"):
-        parsed = parse_eml(data)
-        emails = [parsed] if parsed else []
-    else:
-        emails = parse_mbox(data)
+    emails = [parse_eml(data)] if filename.endswith(".eml") else parse_mbox(data)
+    emails = [e for e in emails if e]
+    if not emails:
+        return {"status": "no_emails", "count": 0}
+    task = asyncio.create_task(_ingest_email_list(emails))
+    task.add_done_callback(_on_task_error)
+    return {"status": "ingestion started", "count": len(emails)}
+
+
+@app.post("/ingest/emails")
+async def ingest_emails_endpoint():
+    task = asyncio.create_task(_ingest_emails_background())
+    task.add_done_callback(_on_task_error)
+    return {"status": "ingestion started"}
+
+
+@app.post("/ingest/imap")
+async def ingest_imap_endpoint(body: dict[str, Any]):
+    host = body.get("host", "").strip()
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+    port = int(body.get("port") or 993)
+    since_days = int(body.get("since_days") or 90)
+
+    if not (host and username and password):
+        raise HTTPException(status_code=400, detail="host, username, and password are required.")
+
+    try:
+        emails = await asyncio.to_thread(fetch_via_imap, host, port, username, password, since_days)
+    except ImapAuthError as exc:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {exc}")
+    except ImapConnectionError as exc:
+        raise HTTPException(status_code=502, detail=f"Connection failed: {exc}")
 
     if not emails:
         return {"status": "no_emails", "count": 0}
@@ -202,52 +293,17 @@ async def _ingest_email_list(emails: list[dict[str, Any]]) -> None:
     for t in tasks:
         t.add_done_callback(_on_task_error)
     await asyncio.gather(*tasks, return_exceptions=True)
-    await push_event({"type": "ingest_complete", "count": len(emails)})
+    await _push({"type": "ingest_complete", "count": len(emails)})
 
 
-@app.get("/graph")
-async def get_graph():
-    """Return evidence-backed directed relationship graph."""
-    return await build_graph()
-
-
-@app.post("/ingest/emails")
-async def ingest_emails_endpoint():
-    task = asyncio.create_task(ingest_emails_background())
-    task.add_done_callback(_on_task_error)
-    return {"status": "ingestion started"}
-
-
-async def ingest_emails_background():
+async def _ingest_emails_background() -> None:
     emails = fetch_recent_emails(days_back=90)
-    sem = asyncio.Semaphore(5)
+    await _ingest_email_list(emails)
 
-    async def process_one(email: dict[str, Any]) -> None:
-        async with sem:
-            contact = email.get("contact", {})
-            extracted = await extract_entities(email.get("body", ""))
-            if not has_meaningful_extraction(extracted):
-                return
-            contact_email = contact.get("email", "unknown@example.com")
-            await write_interaction_to_hydradb(
-                contact_email=contact_email,
-                contact_name=contact.get("name", "Unknown contact"),
-                company=contact.get("company", "Unknown company"),
-                extracted=extracted,
-                interaction_type="email",
-                raw_text=email.get("body", ""),
-            )
-            client = _hydradb_client()
-            if client:
-                with suppress(Exception):
-                    await store_relations(client, extracted.get("relations") or [], contact_email)
 
-    tasks = [asyncio.create_task(process_one(e)) for e in emails]
-    for t in tasks:
-        t.add_done_callback(_on_task_error)
-    await asyncio.gather(*tasks, return_exceptions=True)
-    await push_event({"type": "ingest_complete", "count": len(emails)})
-
+# ---------------------------------------------------------------------------
+# Startup
+# ---------------------------------------------------------------------------
 
 @app.on_event("startup")
 async def startup():
@@ -257,6 +313,6 @@ async def startup():
             contact_name=meeting_info["contact_name"],
             company=meeting_info["company"],
         )
-        await push_event({"type": "brief", "data": {**brief, "trigger": "calendar"}})
+        await _push({"type": "brief", "data": {**brief, "trigger": "calendar"}})
 
     asyncio.create_task(poll_for_upcoming_meetings(on_upcoming_meeting))

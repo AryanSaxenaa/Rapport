@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, Database, Mail, Radio, RefreshCw, Upload, Users } from 'lucide-react'
+import { Activity, Database, Mail, Radio, RefreshCw, Settings, Upload, Users } from 'lucide-react'
 import { CommandBar } from './components/CommandBar'
 import { ContactCard } from './components/ContactCard'
 import { FloatingOrb } from './components/FloatingOrb'
 import { RelationshipGraph } from './components/RelationshipGraph'
+import { SettingsPanel } from './components/SettingsPanel'
 import { useSidecarSocket } from './hooks/useSidecarSocket'
 import { useRapportStore } from './store/rapport-store'
 import type { Contact, Brief } from './store/rapport-store'
@@ -12,6 +13,7 @@ import type { Contact, Brief } from './store/rapport-store'
 export function App() {
   const {
     commandOpen,
+    settingsOpen,
     minimized,
     isRecording,
     sidecarStatus,
@@ -23,6 +25,7 @@ export function App() {
     ingestingEmails,
     graphData,
     setCommandOpen,
+    setSettingsOpen,
     setSidecarStatus,
     setActiveBrief,
     pushTranscript,
@@ -260,6 +263,14 @@ export function App() {
             <Database size={14} />
             <span>Memory</span>
           </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings size={14} />
+            <span>Settings</span>
+          </motion.button>
         </footer>
       </section>}
 
@@ -275,6 +286,20 @@ export function App() {
             transition={{ type: 'spring', stiffness: 200, damping: 28 }}
           >
             <CommandBar onClose={() => setCommandOpen(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {settingsOpen && (
+          <motion.div
+            className="command-layer"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 28 }}
+          >
+            <SettingsPanel onClose={() => setSettingsOpen(false)} />
           </motion.div>
         )}
       </AnimatePresence>

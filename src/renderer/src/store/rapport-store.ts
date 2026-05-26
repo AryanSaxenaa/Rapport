@@ -1,5 +1,14 @@
 import { create } from 'zustand'
 
+export type DepStatus = { ok: boolean; reason: string | null }
+
+export type SidecarStatus_Deps = {
+  hydradb: DepStatus
+  openrouter: DepStatus
+  microphone: DepStatus
+  imap: DepStatus
+}
+
 export type GraphNode = {
   id: string
   label: string
@@ -98,6 +107,7 @@ type RapportState = {
   isRecording: boolean
   sidecarStatus: 'checking' | 'online' | 'offline'
   commandOpen: boolean
+  settingsOpen: boolean
   activeBrief: Brief | null
   briefLoading: boolean
   liveTranscript: string[]
@@ -111,9 +121,11 @@ type RapportState = {
   minimized: boolean
   graphData: GraphData
   graphLoading: boolean
+  depStatus: SidecarStatus_Deps | null
   setRecording: (value: boolean) => void
   setSidecarStatus: (value: RapportState['sidecarStatus']) => void
   setCommandOpen: (value: boolean) => void
+  setSettingsOpen: (value: boolean) => void
   setActiveBrief: (brief: Brief | null) => void
   setBriefLoading: (loading: boolean) => void
   setMinimized: (value: boolean) => void
@@ -122,7 +134,9 @@ type RapportState = {
   setSelectedContact: (contact: Contact) => void
   fetchContacts: () => Promise<void>
   fetchGraph: () => Promise<void>
+  fetchDepStatus: () => Promise<void>
   ingestEmails: () => Promise<void>
+  ingestImap: (cfg: { host: string; port: number; username: string; password: string; since_days: number }) => Promise<{ count: number }>
   startRecording: (contact: Contact) => Promise<{ status: string; reason?: string }>
   stopRecording: () => Promise<void>
   fetchBrief: (contactEmail: string, contactName: string, company: string) => Promise<Brief | null>
@@ -139,6 +153,7 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   isRecording: false,
   sidecarStatus: 'checking',
   commandOpen: false,
+  settingsOpen: false,
   minimized: false,
   activeBrief: null,
   briefLoading: false,
@@ -152,10 +167,12 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   ingestingEmails: false,
   graphData: { nodes: [], edges: [] },
   graphLoading: false,
+  depStatus: null,
 
   setRecording: (value) => set({ isRecording: value }),
   setSidecarStatus: (value) => set({ sidecarStatus: value }),
   setCommandOpen: (value) => set({ commandOpen: value }),
+  setSettingsOpen: (value) => set({ settingsOpen: value }),
   setActiveBrief: (brief) => set({ activeBrief: brief }),
   setBriefLoading: (loading) => set({ briefLoading: loading }),
   setMinimized: (value) => set({ minimized: value }),
@@ -196,6 +213,24 @@ export const useRapportStore = create<RapportState>((set, get) => ({
     } catch {
       set({ graphLoading: false })
     }
+  },
+
+  fetchDepStatus: async () => {
+    try {
+      const data = await sidecarRequest<SidecarStatus_Deps>('/status')
+      set({ depStatus: data })
+    } catch {
+      /* sidecar offline — leave depStatus null */
+    }
+  },
+
+  ingestImap: async (cfg) => {
+    const data = await sidecarRequest<{ count: number; status: string }>('/ingest/imap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    })
+    return { count: data.count ?? 0 }
   },
 
   ingestEmails: async () => {

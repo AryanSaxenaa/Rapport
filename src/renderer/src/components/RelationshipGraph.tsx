@@ -1,128 +1,183 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
+import type { GraphNode, GraphEdge, EvidenceItem } from '../store/rapport-store'
 
-type Node = { id: string; name: string; company: string; stance: string; type: 'person' | 'company' | 'topic' }
-type Link = { source: string; target: string; type: string; strength: number }
+const EDGE_COLORS = {
+  red: '#df5f3b',
+  amber: '#c9921a',
+  green: '#54c878',
+  grey: '#5a5a5a',
+}
 
-export function RelationshipGraph({ nodes, links }: { nodes: Node[]; links: Link[] }) {
+type SimNode = GraphNode & d3.SimulationNodeDatum
+
+type EvidencePanel = {
+  edge: GraphEdge
+  x: number
+  y: number
+}
+
+export function RelationshipGraph({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge[] }) {
   const svgRef = useRef<SVGSVGElement>(null)
+  const [evidence, setEvidence] = useState<EvidencePanel | null>(null)
 
   useEffect(() => {
     if (!svgRef.current) return
+    setEvidence(null)
 
     const width = 390
-    const height = 250
-    const localNodes = nodes.map((node) => ({ ...node }))
-    const localLinks = links.map((link) => ({ ...link }))
+    const height = 260
+    const simNodes: SimNode[] = nodes.map((n) => ({ ...n }))
+
+    type SimLink = Omit<GraphEdge, 'from' | 'to'> & d3.SimulationLinkDatum<SimNode> & {
+      source: string | SimNode
+      target: string | SimNode
+      originalEdge: GraphEdge
+    }
+    const simLinks: SimLink[] = edges.map((e) => ({
+      ...e,
+      source: e.from,
+      target: e.to,
+      originalEdge: e,
+    }))
 
     const svg = d3.select(svgRef.current).attr('viewBox', `0 0 ${width} ${height}`)
     svg.selectAll('*').remove()
 
     const defs = svg.append('defs')
-    const pattern = defs
-      .append('pattern')
+
+    // Arrow markers per color
+    Object.entries(EDGE_COLORS).forEach(([key, color]) => {
+      defs.append('marker')
+        .attr('id', `arrow-${key}`)
+        .attr('viewBox', '0 -4 8 8')
+        .attr('refX', 18)
+        .attr('refY', 0)
+        .attr('markerWidth', 5)
+        .attr('markerHeight', 5)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-4L8,0L0,4')
+        .attr('fill', color)
+    })
+
+    const dotPattern = defs.append('pattern')
       .attr('id', 'graph-dots')
       .attr('width', 18)
       .attr('height', 18)
       .attr('patternUnits', 'userSpaceOnUse')
-
-    pattern.append('circle').attr('cx', 9).attr('cy', 9).attr('r', 0.9).attr('fill', '#262626')
+    dotPattern.append('circle').attr('cx', 9).attr('cy', 9).attr('r', 0.9).attr('fill', '#262626')
     svg.append('rect').attr('width', width).attr('height', height).attr('fill', 'url(#graph-dots)')
 
-    const stanceColor = (stance: string) =>
-      ({ champion: '#54c878', skeptic: '#df5f3b', neutral: '#7a7a7a', blocker: '#d75b5b' })[stance] ?? '#5f5f5f'
-
     const simulation = d3
-      .forceSimulation(localNodes as d3.SimulationNodeDatum[])
-      .force('link', d3.forceLink(localLinks).id((node: any) => node.id).distance(76))
-      .force('charge', d3.forceManyBody().strength(-145))
+      .forceSimulation<SimNode>(simNodes)
+      .force('link', d3.forceLink<SimNode, SimLink>(simLinks).id((d) => d.id).distance(80))
+      .force('charge', d3.forceManyBody().strength(-160))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collide', d3.forceCollide().radius(30))
+      .force('collide', d3.forceCollide<SimNode>().radius((d) => nodeRadius(d) + 6))
 
-    const link = svg
-      .append('g')
-      .selectAll('line')
-      .data(localLinks)
+    const linkG = svg.append('g')
+    const link = linkG
+      .selectAll<SVGLineElement, SimLink>('line')
+      .data(simLinks)
       .join('line')
-      .attr('stroke', '#3a3a3a')
-      .attr('stroke-width', (item) => item.strength * 1.8)
-
-    const label = svg
-      .append('g')
-      .selectAll('text')
-      .data(localLinks)
-      .join('text')
-      .attr('font-family', 'Silkscreen, monospace')
-      .attr('font-size', '7')
-      .attr('fill', '#666')
-      .attr('text-anchor', 'middle')
-      .text((item) => item.type.toUpperCase())
-
-    const dragBehavior = d3
-      .drag<SVGGElement, any>()
-      .on('start', (event, item) => {
-        if (!event.active) simulation.alphaTarget(0.3).restart()
-        item.fx = item.x
-        item.fy = item.y
-      })
-      .on('drag', (event, item) => {
-        item.fx = event.x
-        item.fy = event.y
-      })
-      .on('end', (event, item) => {
-        if (!event.active) simulation.alphaTarget(0)
-        item.fx = null
-        item.fy = null
+      .attr('stroke', (d) => EDGE_COLORS[d.color] ?? EDGE_COLORS.grey)
+      .attr('stroke-width', (d) => Math.max(1, Math.min(4, d.weight * 1.5)))
+      .attr('stroke-opacity', 0.85)
+      .attr('marker-end', (d) => `url(#arrow-${d.color})`)
+      .style('cursor', 'pointer')
+      .on('click', (event: MouseEvent, d) => {
+        event.stopPropagation()
+        setEvidence({ edge: d.originalEdge, x: event.offsetX, y: event.offsetY })
       })
 
-    const node = svg
-      .append('g')
-      .selectAll<SVGGElement, any>('g')
-      .data(localNodes)
+    const nodeG = svg.append('g')
+    const drag = d3.drag<SVGGElement, SimNode>()
+      .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
+      .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y })
+      .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null })
+
+    const node = nodeG
+      .selectAll<SVGGElement, SimNode>('g')
+      .data(simNodes)
       .join('g')
-      .call(dragBehavior)
+      .call(drag)
+      .style('cursor', 'pointer')
 
-    node
-      .append('circle')
-      .attr('r', (item) => (item.type === 'company' ? 15 : item.type === 'topic' ? 12 : 10))
+    node.append('circle')
+      .attr('r', nodeRadius)
       .attr('fill', '#101010')
-      .attr('stroke', (item) => (item.type === 'person' ? stanceColor(item.stance) : '#696969'))
-      .attr('stroke-width', 1.4)
+      .attr('stroke', '#4a9eff')
+      .attr('stroke-width', (d) => 1 + d.importance * 1.5)
 
-    node
-      .append('text')
+    node.append('text')
       .attr('dy', '0.35em')
       .attr('text-anchor', 'middle')
       .attr('font-family', 'Silkscreen, monospace')
-      .attr('font-size', '8')
+      .attr('font-size', '7')
       .attr('fill', '#f2f2f2')
-      .text((item) => item.name.slice(0, 5).toUpperCase())
+      .attr('pointer-events', 'none')
+      .text((d) => d.label.split(' ')[0].slice(0, 6).toUpperCase())
 
     simulation.on('tick', () => {
       link
-        .attr('x1', (item: any) => item.source.x)
-        .attr('y1', (item: any) => item.source.y)
-        .attr('x2', (item: any) => item.target.x)
-        .attr('y2', (item: any) => item.target.y)
-
-      label
-        .attr('x', (item: any) => (item.source.x + item.target.x) / 2)
-        .attr('y', (item: any) => (item.source.y + item.target.y) / 2)
-
-      node.attr('transform', (item: any) => `translate(${item.x},${item.y})`)
+        .attr('x1', (d) => (d.source as SimNode).x ?? 0)
+        .attr('y1', (d) => (d.source as SimNode).y ?? 0)
+        .attr('x2', (d) => (d.target as SimNode).x ?? 0)
+        .attr('y2', (d) => (d.target as SimNode).y ?? 0)
+      node.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
     })
 
-    return () => {
-      simulation.stop()
-    }
-  }, [nodes, links])
+    svg.on('click', () => setEvidence(null))
+
+    return () => { simulation.stop() }
+  }, [nodes, edges])
 
   return (
     <section className="graph-panel">
       <div className="panel-heading">
         <span>RELATIONSHIP GRAPH</span>
+        {edges.length > 0 && (
+          <span style={{ fontSize: 9, color: 'var(--n-dim)', marginLeft: 8 }}>
+            {edges.length} edge{edges.length !== 1 ? 's' : ''} · click edge for evidence
+          </span>
+        )}
       </div>
-      <svg ref={svgRef} />
+      {edges.length === 0 ? (
+        <div className="graph-empty-state">
+          Not enough evidence yet — ingest emails or record a call.
+        </div>
+      ) : (
+        <div style={{ position: 'relative' }}>
+          <svg ref={svgRef} />
+          {evidence && (
+            <div className="evidence-panel" style={{ top: evidence.y, left: Math.min(evidence.x, 220) }}>
+              <div className="evidence-panel-header">
+                <span style={{ color: EDGE_COLORS[evidence.edge.color] }}>
+                  {evidence.edge.type.toUpperCase()}
+                </span>
+                <span style={{ color: 'var(--n-dim)', fontSize: 9 }}>
+                  {evidence.edge.from} → {evidence.edge.to}
+                </span>
+              </div>
+              {evidence.edge.evidence.length === 0 ? (
+                <p style={{ color: 'var(--n-dim)', fontSize: 10 }}>No source quotes stored.</p>
+              ) : (
+                evidence.edge.evidence.map((item: EvidenceItem, i: number) => (
+                  <div key={i} className="evidence-quote">
+                    <span style={{ color: 'var(--n-dim)', fontSize: 9 }}>{item.date}</span>
+                    <p>"{item.quote}"</p>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   )
+}
+
+function nodeRadius(d: SimNode): number {
+  return 7 + d.importance * 10
 }

@@ -479,6 +479,49 @@ button:active {
   border: 1px solid #1e1e1e;
 }
 
+.graph-empty-state {
+  margin-top: 14px;
+  padding: 18px 12px;
+  color: var(--n-dim);
+  font-size: 10px;
+  text-align: center;
+  border: 1px dashed #2a2a2a;
+  line-height: 1.6;
+}
+
+.evidence-panel {
+  position: absolute;
+  z-index: 10;
+  background: var(--n-bg);
+  border: 1px solid var(--n-border);
+  padding: 10px 12px;
+  max-width: 200px;
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.evidence-panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  font-family: 'Silkscreen', monospace;
+  font-size: 9px;
+}
+
+.evidence-quote {
+  margin-top: 6px;
+  border-left: 2px solid var(--n-border);
+  padding-left: 8px;
+}
+
+.evidence-quote p {
+  color: var(--n-fg);
+  line-height: 1.5;
+  margin: 2px 0 0;
+  font-size: 10px;
+}
+
 /* ---------- footer actions ---------- */
 .footer-actions {
   display: flex;

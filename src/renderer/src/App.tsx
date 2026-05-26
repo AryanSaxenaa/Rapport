@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Activity, Database, Mail, Radio, RefreshCw, Upload, Users } from 'lucide-react'
 import { CommandBar } from './components/CommandBar'
@@ -21,11 +21,13 @@ export function App() {
     contactsError,
     contactsSource,
     ingestingEmails,
+    graphData,
     setCommandOpen,
     setSidecarStatus,
     setActiveBrief,
     pushTranscript,
     fetchContacts,
+    fetchGraph,
     setSelectedContact,
     ingestEmails,
     startRecording,
@@ -37,30 +39,16 @@ export function App() {
 
   useSidecarSocket({
     onStatusChange: setSidecarStatus,
-    onConnect: () => void fetchContacts(),
+    onConnect: () => { void fetchContacts(); void fetchGraph() },
     onTranscript: pushTranscript,
     onBrief: (data) => setActiveBrief(data as Brief),
     onError: (msg) => pushTranscript(`Error: ${msg}`),
   })
 
-
   useEffect(() => {
     void fetchContacts()
-  }, [fetchContacts])
-
-  // Build graph nodes only — edges come from /graph endpoint (semantic, evidence-backed)
-  const graphData = useMemo(() => {
-    if (contacts.length === 0) return { nodes: [], links: [] }
-    const nodes = contacts.map((c, i) => ({
-      id: c.contactEmail,
-      name: c.contactName,
-      company: c.company,
-      stance: c.stance,
-      type: 'person' as const,
-      group: i,
-    }))
-    return { nodes, links: [] }
-  }, [contacts])
+    void fetchGraph()
+  }, [fetchContacts, fetchGraph])
 
   async function handleFileDrop(event: React.DragEvent<HTMLElement>) {
     event.preventDefault()
@@ -89,6 +77,7 @@ export function App() {
     setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
     setTimeout(() => setFileIngestStatus(null), 4000)
     void fetchContacts()
+    void fetchGraph()
   }
 
   return (
@@ -199,7 +188,7 @@ export function App() {
           </section>
         </div>
 
-        <RelationshipGraph nodes={graphData.nodes} links={graphData.links} />
+        <RelationshipGraph nodes={graphData.nodes} edges={graphData.edges} />
 
         {fileIngestStatus && (
           <div className={`data-banner${fileIngestStatus.includes('failed') || fileIngestStatus.includes('supported') ? ' warn' : ''}`}>
@@ -254,6 +243,7 @@ export function App() {
                 setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
                 setTimeout(() => setFileIngestStatus(null), 4000)
                 void fetchContacts()
+                void fetchGraph()
               }
               input.click()
             }}

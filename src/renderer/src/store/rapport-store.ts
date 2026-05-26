@@ -1,5 +1,31 @@
 import { create } from 'zustand'
 
+export type GraphNode = {
+  id: string
+  label: string
+  importance: number
+  type: 'person'
+}
+
+export type EvidenceItem = {
+  quote: string
+  date: string
+}
+
+export type GraphEdge = {
+  from: string
+  to: string
+  type: string
+  weight: number
+  color: 'red' | 'amber' | 'green' | 'grey'
+  evidence: EvidenceItem[]
+}
+
+export type GraphData = {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
 export type Stance = 'champion' | 'skeptic' | 'neutral' | 'blocker'
 
 export type Brief = {
@@ -83,6 +109,8 @@ type RapportState = {
   contactsSource: string | null
   ingestingEmails: boolean
   minimized: boolean
+  graphData: GraphData
+  graphLoading: boolean
   setRecording: (value: boolean) => void
   setSidecarStatus: (value: RapportState['sidecarStatus']) => void
   setCommandOpen: (value: boolean) => void
@@ -93,6 +121,7 @@ type RapportState = {
   setDetectedContacts: (contacts: string[]) => void
   setSelectedContact: (contact: Contact) => void
   fetchContacts: () => Promise<void>
+  fetchGraph: () => Promise<void>
   ingestEmails: () => Promise<void>
   startRecording: (contact: Contact) => Promise<{ status: string; reason?: string }>
   stopRecording: () => Promise<void>
@@ -121,6 +150,8 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   contactsError: null,
   contactsSource: null,
   ingestingEmails: false,
+  graphData: { nodes: [], edges: [] },
+  graphLoading: false,
 
   setRecording: (value) => set({ isRecording: value }),
   setSidecarStatus: (value) => set({ sidecarStatus: value }),
@@ -154,6 +185,16 @@ export const useRapportStore = create<RapportState>((set, get) => ({
         contactsError: `Could not reach sidecar. Showing demo contacts. ${String(err)}`,
         selectedContact: demoContacts[0],
       })
+    }
+  },
+
+  fetchGraph: async () => {
+    set({ graphLoading: true })
+    try {
+      const data = await sidecarRequest<GraphData>('/graph')
+      set({ graphData: data, graphLoading: false })
+    } catch {
+      set({ graphLoading: false })
     }
   },
 

@@ -16,7 +16,8 @@ from contact_repository import fetch_contacts as _fetch_contacts
 from email_file_reader import parse_eml, parse_mbox
 from entity_extractor import extract_entities, has_meaningful_extraction
 from gmail_reader import fetch_recent_emails
-from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb
+from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb, _hydradb_client
+from relationship_graph import build_graph, store_relations
 
 app = FastAPI(title="Rapport Sidecar", version="0.1.0")
 app.add_middleware(
@@ -115,6 +116,14 @@ async def _extract_and_store(text: str):
         interaction_type="call",
         raw_text=text,
     )
+    client = _hydradb_client()
+    if client:
+        with suppress(Exception):
+            await store_relations(
+                client,
+                extracted.get("relations") or [],
+                contact.get("contactEmail") or contact.get("contact_email"),
+            )
 
 
 @app.post("/recording/stop")
@@ -175,20 +184,31 @@ async def _ingest_email_list(emails: list[dict[str, Any]]) -> None:
             extracted = await extract_entities(email_item.get("body", ""))
             if not has_meaningful_extraction(extracted):
                 return
+            contact_email = contact.get("email", "")
             await write_interaction_to_hydradb(
-                contact_email=contact.get("email", ""),
+                contact_email=contact_email,
                 contact_name=contact.get("name", ""),
                 company=contact.get("company", ""),
                 extracted=extracted,
                 interaction_type="email",
                 raw_text=email_item.get("body", ""),
             )
+            client = _hydradb_client()
+            if client:
+                with suppress(Exception):
+                    await store_relations(client, extracted.get("relations") or [], contact_email)
 
     tasks = [asyncio.create_task(process_one(e)) for e in emails]
     for t in tasks:
         t.add_done_callback(_on_task_error)
     await asyncio.gather(*tasks, return_exceptions=True)
     await push_event({"type": "ingest_complete", "count": len(emails)})
+
+
+@app.get("/graph")
+async def get_graph():
+    """Return evidence-backed directed relationship graph."""
+    return await build_graph()
 
 
 @app.post("/ingest/emails")
@@ -208,14 +228,19 @@ async def ingest_emails_background():
             extracted = await extract_entities(email.get("body", ""))
             if not has_meaningful_extraction(extracted):
                 return
+            contact_email = contact.get("email", "unknown@example.com")
             await write_interaction_to_hydradb(
-                contact_email=contact.get("email", "unknown@example.com"),
+                contact_email=contact_email,
                 contact_name=contact.get("name", "Unknown contact"),
                 company=contact.get("company", "Unknown company"),
                 extracted=extracted,
                 interaction_type="email",
                 raw_text=email.get("body", ""),
             )
+            client = _hydradb_client()
+            if client:
+                with suppress(Exception):
+                    await store_relations(client, extracted.get("relations") or [], contact_email)
 
     tasks = [asyncio.create_task(process_one(e)) for e in emails]
     for t in tasks:

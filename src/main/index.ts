@@ -108,7 +108,6 @@ function createTray() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Show Rapport', click: () => mainWindow?.show() },
-      { label: 'Ingest Emails', click: () => void callSidecar('/ingest/emails', { method: 'POST' }) },
       { label: 'Open HydraDB', click: () => void shell.openExternal('https://app.hydradb.com') },
       { type: 'separator' },
       { label: 'Quit', click: () => app.quit() }
@@ -116,58 +115,14 @@ function createTray() {
   )
 }
 
-async function callSidecar(pathname: string, init?: RequestInit) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15000)
-  try {
-    const response = await fetch(`${sidecarUrl}${pathname}`, { ...init, signal: controller.signal })
-    if (!response.ok) {
-      throw new Error(`Sidecar ${response.status}: ${await response.text()}`)
-    }
-    return response.json()
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
-ipcMain.handle('start-recording', async (_, contact) => {
-  return callSidecar('/recording/start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(contact)
-  })
-})
-
-ipcMain.handle('stop-recording', async () => {
-  return callSidecar('/recording/stop', { method: 'POST' })
-})
-
-ipcMain.handle('get-brief', async (_, payload: { contactEmail: string; contactName: string; company: string }) => {
-  const params = new URLSearchParams({
-    contact_name: payload.contactName,
-    company: payload.company
-  })
-  return callSidecar(`/brief/${encodeURIComponent(payload.contactEmail)}?${params}`)
-})
-
-ipcMain.handle('get-contacts', async () => {
-  return callSidecar('/contacts')
-})
-
-ipcMain.handle('ingest-emails', async () => {
-  return callSidecar('/ingest/emails', { method: 'POST' })
-})
-
 let windowBeforeMinimize: { x: number; y: number } | null = null
 
 ipcMain.handle('minimize-window', () => {
   if (!mainWindow) return
-  // Only save position on first minimize (ignore rapid double-clicks)
   if (windowBeforeMinimize) return
   const bounds = mainWindow.getBounds()
-  const orbSize = 100 // 64px orb + 24px padding each side
+  const orbSize = 100
   windowBeforeMinimize = { x: bounds.x, y: bounds.y }
-  // Shrink to orb corner (right edge of current position)
   mainWindow.setBounds({ x: bounds.x + bounds.width - orbSize, y: bounds.y, width: orbSize, height: orbSize }, true)
 })
 

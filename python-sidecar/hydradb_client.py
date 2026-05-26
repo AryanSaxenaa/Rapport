@@ -14,13 +14,13 @@ TENANT_ID = os.getenv("HYDRA_DB_TENANT_ID") or os.getenv("HYDRADB_TENANT_ID") or
 API_KEY = os.getenv("HYDRA_DB_API_KEY") or os.getenv("HYDRADB_API_KEY")
 RETRYABLE_STATUS_CODES = {429, 500, 503}
 
-# Configurable brief model via env var (comma-separated for fallback ordering)
-# Default: openrouter/owl-alpha primary, poolside/laguna-m.1:free fallback
-_BRIEF_MODELS = [
-    m.strip()
-    for m in (os.getenv("BRIEF_MODEL") or "openrouter/owl-alpha,poolside/laguna-m.1:free").split(",")
-    if m.strip()
-]
+
+def parse_model_list(env_var: str, default: str) -> list[str]:
+    """Return a list of model IDs from a comma-separated env var."""
+    return [m.strip() for m in (os.getenv(env_var) or default).split(",") if m.strip()]
+
+
+_BRIEF_MODELS = parse_model_list("BRIEF_MODEL", "openrouter/owl-alpha,poolside/laguna-m.1:free")
 LOCAL_CONTACTS_PATH = Path(__file__).parent / "rapport_contacts.json"
 
 

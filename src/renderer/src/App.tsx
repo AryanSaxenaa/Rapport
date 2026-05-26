@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Activity, Database, Mail, Radio, RefreshCw, Upload, Users } from 'lucide-react'
 import { CommandBar } from './components/CommandBar'
 import { ContactCard } from './components/ContactCard'
 import { FloatingOrb } from './components/FloatingOrb'
 import { RelationshipGraph } from './components/RelationshipGraph'
+import { useSidecarSocket } from './hooks/useSidecarSocket'
 import { useRapportStore } from './store/rapport-store'
-import type { Contact } from './store/rapport-store'
+import type { Contact, Brief } from './store/rapport-store'
 
 export function App() {
   const {
@@ -27,87 +28,21 @@ export function App() {
     fetchContacts,
     setSelectedContact,
     ingestEmails,
+    startRecording,
+    stopRecording,
   } = useRapportStore()
 
   const [dragOver, setDragOver] = useState(false)
   const [fileIngestStatus, setFileIngestStatus] = useState<string | null>(null)
 
-  // WebSocket connection with auto-reconnect
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  useSidecarSocket({
+    onStatusChange: setSidecarStatus,
+    onConnect: () => void fetchContacts(),
+    onTranscript: pushTranscript,
+    onBrief: (data) => setActiveBrief(data as Brief),
+    onError: (msg) => pushTranscript(`Error: ${msg}`),
+  })
 
-  const connectWebSocket = useCallback(() => {
-    // Clean up any existing connection
-    if (wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
-    }
-
-    try {
-      const ws = new WebSocket('ws://127.0.0.1:8765/ws/transcript')
-      wsRef.current = ws
-
-      ws.onopen = () => {
-        setSidecarStatus('online')
-        // Refresh contacts when we reconnect
-        fetchContacts()
-        // Clear any reconnect timer since we're connected
-        if (reconnectTimer.current) {
-          clearTimeout(reconnectTimer.current)
-          reconnectTimer.current = null
-        }
-      }
-
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data)
-          if (payload.type === 'transcript') pushTranscript(payload.text)
-          if (payload.type === 'brief') setActiveBrief(payload.data)
-        } catch {
-          /* ignore malformed frames */
-        }
-      }
-
-      ws.onerror = () => {
-        setSidecarStatus('offline')
-      }
-
-      ws.onclose = () => {
-        setSidecarStatus('offline')
-        wsRef.current = null
-        // Schedule reconnect
-        if (!reconnectTimer.current) {
-          reconnectTimer.current = setTimeout(() => {
-            reconnectTimer.current = null
-            connectWebSocket()
-          }, 3000)
-        }
-      }
-    } catch {
-      setSidecarStatus('offline')
-      // Schedule reconnect on error too
-      if (!reconnectTimer.current) {
-        reconnectTimer.current = setTimeout(() => {
-          reconnectTimer.current = null
-          connectWebSocket()
-        }, 3000)
-      }
-    }
-  }, [fetchContacts, pushTranscript, setActiveBrief, setSidecarStatus])
-
-  useEffect(() => {
-    connectWebSocket()
-    return () => {
-      if (reconnectTimer.current) {
-        clearTimeout(reconnectTimer.current)
-        reconnectTimer.current = null
-      }
-      if (wsRef.current) {
-        wsRef.current.close()
-        wsRef.current = null
-      }
-    }
-  }, [connectWebSocket])
 
   useEffect(() => {
     void fetchContacts()
@@ -243,8 +178,10 @@ export function App() {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={async () => {
-                  await window.electron?.startRecording?.(selectedContact)
-                  useRapportStore.getState().setRecording(true)
+                  const result = await startRecording(selectedContact)
+                  if (result.status === 'disabled') {
+                    useRapportStore.getState().pushTranscript(`Recording unavailable: ${result.reason ?? 'unknown reason'}`)
+                  }
                 }}
               >
                 <Radio size={15} />
@@ -254,10 +191,7 @@ export function App() {
                 className="secondary-action"
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={async () => {
-                  await window.electron?.stopRecording?.()
-                  useRapportStore.getState().setRecording(false)
-                }}
+                onClick={() => void stopRecording()}
               >
                 End
               </motion.button>

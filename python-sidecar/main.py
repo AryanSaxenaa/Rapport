@@ -12,12 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from audio_capture import AudioCapture, RecordingDisabled
 from calendar_poller import poll_for_upcoming_meetings
+from contact_repository import fetch_contacts as _fetch_contacts
 from email_file_reader import parse_eml, parse_mbox
 from entity_extractor import extract_entities, has_meaningful_extraction
 from gmail_reader import fetch_recent_emails
-from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb, recall_contact_context, TENANT_ID
-from hydradb_client import demo_contacts, load_local_contacts
-from hydradb_client import _hydradb_client, _sub_tenant_id, _with_retry, _to_plain_data
+from hydradb_client import generate_pre_call_brief, write_interaction_to_hydradb
 
 app = FastAPI(title="Rapport Sidecar", version="0.1.0")
 app.add_middleware(
@@ -137,143 +136,7 @@ async def stop_recording():
 @app.get("/contacts")
 async def list_contacts():
     """Return stored contacts from HydraDB memory graph."""
-    def add_contact(
-        contacts: list[dict[str, Any]],
-        seen: set[str],
-        contact: dict[str, Any],
-    ) -> None:
-        email = (contact.get("contactEmail") or contact.get("contact_email") or "").strip()
-        if not email or email.lower() in seen:
-            return
-        seen.add(email.lower())
-        contacts.append({
-            "contactEmail": email,
-            "contactName": contact.get("contactName") or contact.get("contact_name") or email.split("@")[0].replace(".", " ").title(),
-            "company": contact.get("company") or "",
-            "stance": contact.get("stance") or "neutral",
-            "lastInteraction": contact.get("lastInteraction") or contact.get("interaction_date") or "",
-            "topics": contact.get("topics") or contact.get("topics_raised") or [],
-        })
-
-    def contact_from_sub_id(sub_id: str) -> dict[str, Any]:
-        email = sub_id.replace("_at_", "@").replace("_", ".")
-        return {
-            "contactEmail": email,
-            "contactName": email.split("@")[0].replace(".", " ").title(),
-            "company": "",
-            "stance": "neutral",
-            "lastInteraction": "",
-            "topics": [],
-        }
-
-    def contact_from_sources(sub_id: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
-        contact = contact_from_sub_id(sub_id)
-        for src in sources:
-            meta = src.get("additional_metadata") or src.get("metadata") or {}
-            extracted = meta.get("extracted") if isinstance(meta.get("extracted"), dict) else {}
-            contact["contactEmail"] = contact["contactEmail"] if contact["contactEmail"] else meta.get("contact_email", "")
-            contact["contactName"] = meta.get("contact_name") or contact["contactName"]
-            contact["company"] = meta.get("company") or contact["company"]
-            contact["lastInteraction"] = meta.get("interaction_date") or contact["lastInteraction"]
-            contact["topics"] = meta.get("topics_raised") or extracted.get("topics") or contact["topics"]
-            contact["stance"] = meta.get("stance") or extracted.get("stance") or contact["stance"]
-        return contact
-
-    local_contacts = load_local_contacts()
-    client = _hydradb_client()
-    if not client:
-        return {"contacts": local_contacts or demo_contacts(), "source": "local" if local_contacts else "demo", "warning": "HydraDB API key is not configured."}
-
-    contacts: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for contact in local_contacts:
-        add_contact(contacts, seen, contact)
-
-    try:
-        try:
-            sub_tenants = await _with_retry(
-                lambda: client.tenant.get_sub_tenant_ids(tenant_id=TENANT_ID)
-            )
-            sub_plain = _to_plain_data(sub_tenants)
-            sub_ids = sub_plain.get("sub_tenant_ids") or []
-        except Exception:
-            sub_ids = []
-
-        contact_sub_ids = [sid for sid in sub_ids if not sid.startswith("_")]
-
-        async def recall_sub_tenant(sid: str) -> dict | None:
-            try:
-                pref_data = await _with_retry(
-                    lambda s=sid: client.recall.recall_preferences(
-                        tenant_id=TENANT_ID,
-                        sub_tenant_id=s,
-                        query="contact",
-                        max_results=3,
-                        mode="fast",
-                        graph_context=False,
-                        recency_bias=0.0,
-                    )
-                )
-                return _to_plain_data(pref_data)
-            except Exception:
-                return None
-
-        if contact_sub_ids:
-            results = await asyncio.gather(
-                *(recall_sub_tenant(sid) for sid in contact_sub_ids),
-                return_exceptions=True,
-            )
-
-            for sub_id, result in zip(contact_sub_ids, results):
-                if sub_id.lower() in seen:
-                    continue
-                if isinstance(result, Exception) or not result:
-                    add_contact(contacts, seen, contact_from_sub_id(sub_id))
-                    continue
-
-                sources = result.get("sources") or []
-                add_contact(contacts, seen, contact_from_sources(sub_id, sources))
-
-        if len(contacts) < 2:
-            for query in ("contact", "email interaction", "meeting transcript"):
-                try:
-                    root_data = await _with_retry(
-                        lambda q=query: client.recall.full_recall(
-                            tenant_id=TENANT_ID,
-                            query=q,
-                            max_results=20,
-                            mode="fast",
-                            graph_context=False,
-                            recency_bias=0.0,
-                        )
-                    )
-                    root_plain = _to_plain_data(root_data)
-                    chunks = root_plain.get("chunks") or []
-                    sources = root_plain.get("sources") or []
-                    source_map = {s.get("id"): s for s in sources if s.get("id")}
-                    for chunk in chunks:
-                        source_id = chunk.get("source_id") or chunk.get("id")
-                        source = source_map.get(source_id, {})
-                        meta = source.get("additional_metadata") or source.get("metadata") or {}
-                        if not meta and isinstance(chunk.get("metadata"), dict):
-                            meta = chunk["metadata"]
-                        add_contact(contacts, seen, {
-                            "contactEmail": meta.get("contact_email", ""),
-                            "contactName": meta.get("contact_name", ""),
-                            "company": meta.get("company", ""),
-                            "stance": meta.get("stance", "neutral"),
-                            "lastInteraction": meta.get("interaction_date", ""),
-                            "topics": meta.get("topics_raised", []),
-                        })
-                except Exception:
-                    pass
-
-        if contacts:
-            return {"contacts": contacts, "source": "hydradb"}
-        return {"contacts": demo_contacts(), "source": "demo", "warning": "No contacts were found in HydraDB yet."}
-    except Exception as exc:
-        fallback = local_contacts or demo_contacts()
-        return {"contacts": fallback, "source": "local" if local_contacts else "demo", "error": str(exc)}
+    return await _fetch_contacts()
 
 
 @app.get("/brief/{contact_email}")

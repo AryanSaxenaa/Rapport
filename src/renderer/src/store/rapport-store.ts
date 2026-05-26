@@ -53,47 +53,19 @@ const demoContacts: Contact[] = [
 ]
 
 const normalizeContactsResponse = (data?: ContactsResponse): ContactsResponse => {
-  const contacts = data?.contacts?.filter((contact) => contact.contactEmail && contact.contactName) ?? []
+  const contacts = data?.contacts?.filter((c) => c.contactEmail && c.contactName) ?? []
   if (contacts.length > 0) return { ...data, contacts }
-
   return {
     contacts: demoContacts,
     source: data?.source ?? 'demo',
-    warning: data?.warning ?? data?.error ?? 'Showing demo contacts because no stored contacts were returned yet.',
+    warning: data?.warning ?? data?.error ?? 'Showing demo contacts — no stored contacts found yet.',
   }
 }
 
 const sidecarRequest = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(`${SIDECAR_URL}${path}`, init)
-  if (!response.ok) {
-    throw new Error(`Sidecar ${response.status}: ${await response.text()}`)
-  }
+  if (!response.ok) throw new Error(`Sidecar ${response.status}: ${await response.text()}`)
   return response.json() as Promise<T>
-}
-
-const getContacts = async (): Promise<ContactsResponse> => {
-  if (window.electron?.getContacts) {
-    return window.electron.getContacts()
-  }
-  return sidecarRequest<ContactsResponse>('/contacts')
-}
-
-const ingestEmails = async (): Promise<unknown> => {
-  if (window.electron?.ingestEmails) {
-    return window.electron.ingestEmails()
-  }
-  return sidecarRequest('/ingest/emails', { method: 'POST' })
-}
-
-const getBrief = async (payload: { contactEmail: string; contactName: string; company: string }): Promise<Brief> => {
-  if (window.electron?.getBrief) {
-    return window.electron.getBrief(payload)
-  }
-  const params = new URLSearchParams({
-    contact_name: payload.contactName,
-    company: payload.company,
-  })
-  return sidecarRequest<Brief>(`/brief/${encodeURIComponent(payload.contactEmail)}?${params}`)
 }
 
 type RapportState = {
@@ -122,6 +94,8 @@ type RapportState = {
   setSelectedContact: (contact: Contact) => void
   fetchContacts: () => Promise<void>
   ingestEmails: () => Promise<void>
+  startRecording: (contact: Contact) => Promise<{ status: string; reason?: string }>
+  stopRecording: () => Promise<void>
   fetchBrief: (contactEmail: string, contactName: string, company: string) => Promise<Brief | null>
 }
 
@@ -155,18 +129,16 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   setBriefLoading: (loading) => set({ briefLoading: loading }),
   setMinimized: (value) => set({ minimized: value }),
   pushTranscript: (line) =>
-    set((state) => ({
-      liveTranscript: [...state.liveTranscript.slice(-7), line],
-    })),
+    set((state) => ({ liveTranscript: [...state.liveTranscript.slice(-7), line] })),
   setDetectedContacts: (contacts) => set({ detectedContacts: contacts }),
   setSelectedContact: (contact) => set({ selectedContact: contact }),
 
   fetchContacts: async () => {
     set({ contactsLoading: true, contactsError: null })
     try {
-      const data = await getContacts()
+      const data = await sidecarRequest<ContactsResponse>('/contacts')
       const normalized = normalizeContactsResponse(data)
-      const list: Contact[] = normalized.contacts ?? demoContacts
+      const list = normalized.contacts ?? demoContacts
       set({
         contacts: list,
         contactsLoading: false,
@@ -188,26 +160,37 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   ingestEmails: async () => {
     set({ ingestingEmails: true })
     try {
-      await ingestEmails()
-      // Refresh contacts immediately (endpoint returns what's available)
+      await sidecarRequest('/ingest/emails', { method: 'POST' })
       await get().fetchContacts()
     } catch {
-      /* ingest errors are surfaced silently */
+      /* surfaced via WS error events */
     } finally {
       set({ ingestingEmails: false })
     }
   },
 
+  startRecording: async (contact) => {
+    const result = await sidecarRequest<{ status: string; reason?: string }>('/recording/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(contact),
+    })
+    if (result.status === 'recording') set({ isRecording: true })
+    return result
+  },
+
+  stopRecording: async () => {
+    await sidecarRequest('/recording/stop', { method: 'POST' })
+    set({ isRecording: false })
+  },
+
   fetchBrief: async (contactEmail, contactName, company) => {
     set({ briefLoading: true })
     try {
-      const brief = await getBrief({ contactEmail, contactName, company })
-      if (brief) {
-        set({ activeBrief: brief, briefLoading: false })
-        return brief
-      }
-      set({ briefLoading: false })
-      return null
+      const params = new URLSearchParams({ contact_name: contactName, company })
+      const brief = await sidecarRequest<Brief>(`/brief/${encodeURIComponent(contactEmail)}?${params}`)
+      set({ activeBrief: brief, briefLoading: false })
+      return brief
     } catch {
       set({ briefLoading: false })
       return null

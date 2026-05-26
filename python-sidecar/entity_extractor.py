@@ -4,6 +4,8 @@ from typing import Any
 
 import httpx
 
+from hydradb_client import parse_model_list
+
 
 EXTRACTION_SYSTEM = """Return ONLY valid JSON with keys:
 people, companies, topics, commitments, relations, unresolved, stance, sentiment_shift, summary.
@@ -22,11 +24,7 @@ summary: 1-2 sentence factual summary of the interaction.
 Capture professional relationship intelligence, political influence, risks, and follow-ups.
 Only extract what is explicitly present in the text. Return empty lists when nothing is found."""
 
-_EXTRACTION_MODELS = [
-    m.strip()
-    for m in (os.getenv("EXTRACTION_MODEL") or "openrouter/owl-alpha,poolside/laguna-m.1:free").split(",")
-    if m.strip()
-]
+_EXTRACTION_MODELS = parse_model_list("EXTRACTION_MODEL", "openrouter/owl-alpha,poolside/laguna-m.1:free")
 
 _EMPTY_EXTRACTION: dict[str, Any] = {
     "people": [],

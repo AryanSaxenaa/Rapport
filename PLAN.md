@@ -116,39 +116,39 @@ Current Gmail flow requires: create gcloud project → enable API → OAuth cons
 
 ### Repository / API layer
 
-- [ ] **B4. Decompose `list_contacts`** — `python-sidecar/main.py:115-259` (145-line function)
+- [x] **B4. Decompose `list_contacts`** — extracted to `contact_repository.py`
   - Create `python-sidecar/contact_repository.py`:
     - `iter_from_sub_tenants(client) -> AsyncIterator[Contact]`
     - `iter_from_full_recall(client) -> AsyncIterator[Contact]`
     - `_normalize(meta, fallback_email) -> Contact` (canonical, replace 3 duplicates)
   - `list_contacts` becomes ~15 lines: merge local + 2 iterators through one dedup.
 
-- [ ] **B5. Drop lossy sub-tenant-id decoder** — `python-sidecar/main.py:137`
+- [x] **B5. Drop lossy sub-tenant-id decoder**
   - `_sub_tenant_id` encoder is lossy (`foo.bar` and `foo_bar` collide after decode).
   - Always read email from `metadata.contact_email`. Treat sub-tenant id as opaque.
   - Delete `contact_from_sub_id`.
 
 ### Electron / IPC layer
 
-- [ ] **J1. Delete IPC pass-through layer**
+- [x] **J1. Delete IPC pass-through layer**
   - `src/main/index.ts:133-159` — remove handlers: `get-contacts`, `ingest-emails`, `get-brief`, `start-recording`, `stop-recording`.
   - `src/preload/index.ts:4-11` — remove matching exports.
   - `src/renderer/src/store/rapport-store.ts:74-97` — remove `window.electron?.X` branches; renderer fetches sidecar directly.
   - Keep only `minimize-window` / `restore-window` (real native).
   - Saves ~70 lines.
 
-- [ ] **J3. Extract `useSidecarSocket` hook** — `src/renderer/src/App.tsx:33-107`
+- [x] **J3. Extract `useSidecarSocket` hook** — `src/renderer/src/App.tsx:33-107`
   - 72 lines of WS lifecycle out of UI component.
   - New file: `src/renderer/src/hooks/useSidecarSocket.ts`.
 
 ### Python sidecar shared helpers
 
-- [ ] **J2. Collapse two Google OAuth flows**
+- [x] **J2. Collapse two Google OAuth flows**
   - `gmail_reader.py:18-47` and `calendar_poller.py:22-51` are line-for-line duplicates.
   - New `python-sidecar/google_oauth.py::get_service(api, version, scopes, token_filename)`.
   - Each caller becomes 1 line.
 
-- [ ] **J4. Extract `parse_model_list(env_var, default)`**
+- [x] **J4. Extract `parse_model_list(env_var, default)`**
   - `hydradb_client.py:19-23` and `entity_extractor.py:14-18` duplicate comma-split logic.
 
 ### Type contracts

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, Database, Mail, Radio, RefreshCw, Settings, Upload, Users } from 'lucide-react'
+import { Activity, Database, Radio, RefreshCw, Settings, Upload, Users } from 'lucide-react'
 import { CommandBar } from './components/CommandBar'
 import { ContactCard } from './components/ContactCard'
+import { FirstRunWizard } from './components/FirstRunWizard'
 import { FloatingOrb } from './components/FloatingOrb'
 import { RelationshipGraph } from './components/RelationshipGraph'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -22,8 +23,8 @@ export function App() {
     contactsLoading,
     contactsError,
     contactsSource,
-    ingestingEmails,
     graphData,
+    depStatus,
     setCommandOpen,
     setSettingsOpen,
     setSidecarStatus,
@@ -31,18 +32,20 @@ export function App() {
     pushTranscript,
     fetchContacts,
     fetchGraph,
+    fetchDepStatus,
     setSelectedContact,
-    ingestEmails,
     startRecording,
     stopRecording,
   } = useRapportStore()
+
+  const [wizardDismissed, setWizardDismissed] = useState(false)
 
   const [dragOver, setDragOver] = useState(false)
   const [fileIngestStatus, setFileIngestStatus] = useState<string | null>(null)
 
   useSidecarSocket({
     onStatusChange: setSidecarStatus,
-    onConnect: () => { void fetchContacts(); void fetchGraph() },
+    onConnect: () => { void fetchContacts(); void fetchGraph(); void fetchDepStatus() },
     onTranscript: pushTranscript,
     onBrief: (data) => setActiveBrief(data as Brief),
     onError: (msg) => pushTranscript(`Error: ${msg}`),
@@ -51,7 +54,14 @@ export function App() {
   useEffect(() => {
     void fetchContacts()
     void fetchGraph()
-  }, [fetchContacts, fetchGraph])
+    void fetchDepStatus()
+  }, [fetchContacts, fetchGraph, fetchDepStatus])
+
+  const showWizard =
+    !wizardDismissed &&
+    sidecarStatus === 'online' &&
+    depStatus !== null &&
+    (!depStatus.hydradb.ok || !depStatus.openrouter.ok)
 
   async function handleFileDrop(event: React.DragEvent<HTMLElement>) {
     event.preventDefault()
@@ -210,17 +220,6 @@ export function App() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            disabled={ingestingEmails}
-            onClick={() => void ingestEmails()}
-            style={{ opacity: ingestingEmails ? 0.6 : 1 }}
-            title="Ingest via Gmail OAuth (requires credentials.json)"
-          >
-            {ingestingEmails ? <RefreshCw size={14} className="spin" /> : <Mail size={14} />}
-            <span>{ingestingEmails ? 'Ingesting…' : 'Ingest'}</span>
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
             onClick={() => {
               const input = document.createElement('input')
               input.type = 'file'
@@ -275,6 +274,13 @@ export function App() {
       </section>}
 
       <FloatingOrb />
+
+      {showWizard && depStatus && (
+        <FirstRunWizard
+          depStatus={depStatus}
+          onComplete={() => setWizardDismissed(true)}
+        />
+      )}
 
       <AnimatePresence>
         {commandOpen && (

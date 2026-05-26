@@ -36,24 +36,35 @@ async function startPythonSidecar() {
     return
   }
 
-  const sidecarDir = path.join(appRoot(), 'python-sidecar')
-  const pythonCommand = process.platform === 'win32' ? 'python' : 'python3'
+  const root = appRoot()
+  let cmd: string
+  let args: string[]
 
-  pythonProcess = spawn(
-    pythonCommand,
-    ['-m', 'uvicorn', 'main:app', '--port', '8765', '--host', '127.0.0.1'],
-    {
-      cwd: sidecarDir,
-      env: {
-        ...process.env,
-        HYDRA_DB_API_KEY: process.env.HYDRA_DB_API_KEY ?? process.env.HYDRADB_API_KEY ?? '',
-        HYDRA_DB_TENANT_ID: process.env.HYDRA_DB_TENANT_ID ?? process.env.HYDRADB_TENANT_ID ?? '',
-        HYDRADB_TENANT_ID: process.env.HYDRADB_TENANT_ID ?? process.env.HYDRA_DB_TENANT_ID ?? '',
-        OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ?? '',
-        MY_EMAIL: process.env.MY_EMAIL ?? ''
-      }
+  // Production: use PyInstaller binary if present
+  const binaryName = process.platform === 'win32' ? 'rapport-sidecar.exe' : 'rapport-sidecar'
+  const bundledBinary = path.join(root, 'python-sidecar', 'dist', 'rapport-sidecar', binaryName)
+  const binaryExists = await import('node:fs').then((fs) => fs.existsSync(bundledBinary))
+
+  if (!isDev && binaryExists) {
+    cmd = bundledBinary
+    args = ['--port', '8765', '--host', '127.0.0.1']
+  } else {
+    const pythonCommand = process.platform === 'win32' ? 'python' : 'python3'
+    cmd = pythonCommand
+    args = ['-m', 'uvicorn', 'main:app', '--port', '8765', '--host', '127.0.0.1']
+  }
+
+  pythonProcess = spawn(cmd, args, {
+    cwd: path.join(root, 'python-sidecar'),
+    env: {
+      ...process.env,
+      HYDRA_DB_API_KEY: process.env.HYDRA_DB_API_KEY ?? process.env.HYDRADB_API_KEY ?? '',
+      HYDRA_DB_TENANT_ID: process.env.HYDRA_DB_TENANT_ID ?? process.env.HYDRADB_TENANT_ID ?? '',
+      HYDRADB_TENANT_ID: process.env.HYDRADB_TENANT_ID ?? process.env.HYDRA_DB_TENANT_ID ?? '',
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ?? '',
+      MY_EMAIL: process.env.MY_EMAIL ?? ''
     }
-  )
+  })
 
   pythonProcess.stdout?.on('data', (data) => {
     if (isDev) console.log(`[Python] ${data.toString()}`)
@@ -137,6 +148,16 @@ app.whenReady().then(async () => {
   await startPythonSidecar()
   createWindow()
   createTray()
+
+  // Auto-update: only runs in production with electron-updater installed
+  if (!isDev) {
+    try {
+      const { autoUpdater } = await import('electron-updater')
+      autoUpdater.checkForUpdatesAndNotify().catch(() => {/* no network or no release */})
+    } catch {
+      // electron-updater not installed — skip silently
+    }
+  }
 })
 
 app.on('window-all-closed', () => {
@@ -146,3 +167,4 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   pythonProcess?.kill()
 })
+

@@ -46,6 +46,10 @@ def _normalise_contact(contact: dict[str, Any]) -> dict[str, Any]:
         "stance": contact.get("stance") or "neutral",
         "lastInteraction": contact.get("lastInteraction") or contact.get("interaction_date") or "",
         "topics": contact.get("topics") or contact.get("topics_raised") or [],
+        "sentimentShift": contact.get("sentiment_shift") or "",
+        "commitments": contact.get("commitments") or [],
+        "unresolved": contact.get("unresolved") or [],
+        "summary": contact.get("summary") or "",
     }
 
 

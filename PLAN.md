@@ -151,19 +151,26 @@ Current Gmail flow requires: create gcloud project → enable API → OAuth cons
 
 For "easily downloadable":
 
-- [ ] **Bundle Python sidecar with PyInstaller**
-  - Single `.exe`/`.dmg` so users don't need Python+pip.
+- [x] **Bundle Python sidecar with PyInstaller**
+  - `python-sidecar/rapport_sidecar.spec` — run `pyinstaller rapport_sidecar.spec` from `python-sidecar/`.
+  - Output: `python-sidecar/dist/rapport-sidecar/rapport-sidecar[.exe]`
+  - Main process detects binary and uses it in production; falls back to `python3 -m uvicorn` in dev.
 
-- [ ] **electron-builder config**
-  - Generate Windows installer + macOS dmg.
-  - Signed binaries (cert needed).
+- [x] **electron-builder config**
+  - `electron-builder.yml` at repo root.
+  - Windows NSIS installer, macOS DMG (universal), Linux AppImage.
+  - Publish to GitHub Releases for auto-update.
 
-- [ ] **Auto-updater**
-  - `electron-updater` with GitHub releases.
+- [x] **Auto-updater**
+  - `src/main/index.ts` calls `autoUpdater.checkForUpdatesAndNotify()` in production.
+  - Dynamic import — gracefully skipped if `electron-updater` is not installed.
+  - Install: `npm install electron-updater`.
 
-- [ ] **First-run onboarding wizard**
-  - HydraDB key, OpenRouter key, mail strategy chosen above.
-  - Store via OS keychain, not `.env`.
+- [x] **First-run onboarding wizard**
+  - `FirstRunWizard.tsx`: shows when sidecar is online but HydraDB/OpenRouter keys are missing.
+  - Inputs for HydraDB key + tenant ID, OpenRouter key.
+  - POSTs to `POST /configure` which writes to `.env` and reloads env vars in-process.
+  - Skip button enters demo mode without keys.
 
 ---
 

@@ -29,6 +29,10 @@ def normalize_contact(meta: dict[str, Any], fallback_email: str = "") -> dict[st
         "stance": meta.get("stance") or extracted.get("stance") or "neutral",
         "lastInteraction": meta.get("interaction_date") or meta.get("lastInteraction") or "",
         "topics": meta.get("topics_raised") or extracted.get("topics") or [],
+        "sentimentShift": meta.get("sentiment_shift") or extracted.get("sentiment_shift") or "",
+        "commitments": extracted.get("commitments") or [],
+        "unresolved": extracted.get("unresolved") or [],
+        "summary": extracted.get("summary") or "",
     }
 
 

@@ -61,6 +61,40 @@ export function ContactCard({ contact }: { contact: Contact }) {
             ))}
           </div>
         )}
+        {contact.summary && (
+          <p className="interaction-note">
+            <CalendarDays size={12} />
+            {contact.summary}
+          </p>
+        )}
+        {contact.commitments && contact.commitments.length > 0 && (
+          <div className="brief-section">
+            <span className="micro-label">Commitments ({contact.commitments.length})</span>
+            <ul>
+              {contact.commitments.slice(0, 3).map((c, i) => (
+                <li key={i}>
+                  <strong>{c.owner}:</strong> {c.what}
+                  <span className={`commit-status ${c.status}`}>{c.status}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {contact.unresolved && contact.unresolved.length > 0 && (
+          <div className="brief-section">
+            <span className="micro-label">Awaiting ({contact.unresolved.length})</span>
+            <ul>
+              {contact.unresolved.slice(0, 3).map((u, i) => (
+                <li key={i}>
+                  <strong>{u.holder}</strong> awaits {u.awaiting_from}: {u.what}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {contact.sentimentShift && (
+          <p className="brief-shift-note">{contact.sentimentShift}</p>
+        )}
 
         {briefVisible ? (
           <div className="brief-panel">

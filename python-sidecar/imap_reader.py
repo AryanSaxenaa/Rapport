@@ -1,11 +1,24 @@
 import email
-import html
+import email.utils
 import imaplib
 import re
 import ssl
 from datetime import datetime, timedelta
 from email import policy as email_policy
+from html.parser import HTMLParser
 from typing import Any
+
+
+class _Tagger(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self._parts.append(data)
+
+    def get_text(self) -> str:
+        return " ".join(self._parts)
 
 
 class ImapAuthError(Exception):
@@ -121,9 +134,10 @@ def _extract_body(msg: Any) -> str:
 
 
 def _strip_html(text: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = html.unescape(text)
-    return re.sub(r"\s{2,}", " ", text)
+    tagger = _Tagger()
+    tagger.feed(text)
+    result = tagger.get_text()
+    return re.sub(r"\s+", " ", result).strip()
 
 
 def _guess_company(addr: str) -> str:

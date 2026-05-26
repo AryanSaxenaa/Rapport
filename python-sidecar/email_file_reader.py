@@ -2,20 +2,30 @@
 
 import email
 import email.policy
-import html
 import mailbox
 import re
 from email.message import Message
+from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any
 
 
+class _Tagger(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self._parts.append(data)
+
+    def get_text(self) -> str:
+        return " ".join(self._parts)
+
+
 def _strip_html(html_content: str) -> str:
-    """Best-effort HTML → plain text for HTML-only emails."""
-    text = re.sub(r"<style[^>]*>.*?</style>", " ", html_content, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<script[^>]*>.*?</script>", " ", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = html.unescape(text)
+    tagger = _Tagger()
+    tagger.feed(html_content)
+    text = tagger.get_text()
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 

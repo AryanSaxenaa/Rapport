@@ -1,0 +1,63 @@
+appId: com.rapport.app
+productName: Rapport
+copyright: Copyright © 2026
+
+directories:
+  output: dist-electron
+  buildResources: resources
+
+# Electron-built JS output + sidecar binary (built separately via PyInstaller)
+files:
+  - out/**/*
+  - python-sidecar/dist/rapport-sidecar/**/*
+  - "!python-sidecar/**/*.py"
+  - "!python-sidecar/**/__pycache__"
+  - "!python-sidecar/dist/rapport-sidecar/**/*.pdb"
+
+# --- Windows ---
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+
+# --- macOS ---
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# --- Linux ---
+linux:
+  target: AppImage
+  icon: resources/icon.png
+  category: Office
+
+# --- Auto-update via GitHub Releases ---
+publish:
+  provider: github
+  owner: AryanSaxenaa
+  repo: rapport
+  releaseType: release

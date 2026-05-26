@@ -50,6 +50,21 @@ export type Brief = {
   powerNote: string
 }
 
+export type Commitment = {
+  owner: string
+  what: string
+  status: 'open' | 'closed'
+  due?: string
+  source_quote?: string
+}
+
+export type UnresolvedItem = {
+  holder: string
+  awaiting_from: string
+  what: string
+  since?: string
+}
+
 export type Contact = {
   contactEmail: string
   contactName: string
@@ -57,6 +72,10 @@ export type Contact = {
   stance: Stance
   lastInteraction?: string
   topics?: string[]
+  sentimentShift?: string
+  commitments?: Commitment[]
+  unresolved?: UnresolvedItem[]
+  summary?: string
 }
 
 type ContactsResponse = {
@@ -135,6 +154,7 @@ type RapportState = {
   fetchContacts: () => Promise<void>
   fetchGraph: () => Promise<void>
   fetchDepStatus: () => Promise<void>
+  configureSidecar: (keys: Record<string, string>) => Promise<void>
   ingestEmails: () => Promise<void>
   ingestImap: (cfg: { host: string; port: number; username: string; password: string; since_days: number }) => Promise<{ count: number }>
   startRecording: (contact: Contact) => Promise<{ status: string; reason?: string }>
@@ -222,6 +242,17 @@ export const useRapportStore = create<RapportState>((set, get) => ({
     } catch {
       /* sidecar offline — leave depStatus null */
     }
+  },
+
+  configureSidecar: async (keys: Record<string, string>) => {
+    await sidecarRequest('/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(keys),
+    })
+    // Refresh dep status after configure
+    const data = await sidecarRequest<SidecarStatus_Deps>('/status').catch(() => null)
+    if (data) set({ depStatus: data })
   },
 
   ingestImap: async (cfg) => {

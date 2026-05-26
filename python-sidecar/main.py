@@ -2,6 +2,7 @@ import asyncio
 import os
 from contextlib import suppress
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -92,6 +93,32 @@ async def get_status():
         "microphone": {"ok": mic_ok, "reason": mic_reason},
         "imap": {"ok": True, "reason": "Provide host/credentials to sync"},
     }
+
+
+@app.post("/configure")
+async def configure(body: dict[str, Any]):
+    """Write API keys to .env file in the sidecar directory and reload them."""
+    env_path = Path(__file__).parent / ".env"
+    allowed_keys = {"HYDRA_DB_API_KEY", "HYDRADB_API_KEY", "HYDRA_DB_TENANT_ID", "OPENROUTER_API_KEY"}
+    updates = {k: v for k, v in body.items() if k in allowed_keys and v}
+    if not updates:
+        return {"status": "no_changes"}
+
+    existing: dict[str, str] = {}
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                existing[k.strip()] = v.strip()
+
+    existing.update(updates)
+    env_path.write_text(
+        "\n".join(f"{k}={v}" for k, v in existing.items()) + "\n",
+        encoding="utf-8",
+    )
+    load_dotenv(env_path, override=True)
+    return {"status": "saved", "keys": list(updates.keys())}
 
 
 def _check_mic() -> tuple[bool, str | None]:

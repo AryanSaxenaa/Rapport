@@ -120,17 +120,17 @@ Current Gmail flow requires: create gcloud project → enable API → OAuth cons
 
 ### Functional gaps
 
-- [ ] **S3. Handle HTML-only emails** — `python-sidecar/gmail_reader.py:50-63`
+- [x] **S3. Handle HTML-only emails** — `python-sidecar/gmail_reader.py:50-63`
   - Current `_parse_email_payload` returns first `text/plain`. HTML-only multipart -> dropped.
   - Add `text/html` strip fallback (`html.parser` or `BeautifulSoup`).
 
-- [ ] **O1. Parallelize email ingestion** — `python-sidecar/main.py:273-285`
+- [x] **O1. Parallelize email ingestion** — `python-sidecar/main.py:273-285`
   - Currently sequential: 50 × ~3s = 150s wall-time.
   - `asyncio.gather` with concurrency cap (e.g. semaphore of 5).
 
 ### UI surfacing
 
-- [ ] **Rewrite ContactCard to show recall content** — `src/renderer/src/components/ContactCard.tsx`
+- [x] **Rewrite ContactCard to show recall content** — `src/renderer/src/components/ContactCard.tsx`
   - Currently: name/company/email/last-date only.
   - Add: topics, last N interaction summaries, commitments, stance reasoning.
   - Pull from `/contacts` response (extend backend to include richer fields per contact).

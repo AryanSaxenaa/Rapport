@@ -1,7 +1,8 @@
 import json
-from typing import Any
+from typing import cast
 
 from openrouter_client import chat, extract_content, parse_model_list
+from sidecar_types import ExtractionResult
 
 EXTRACTION_SYSTEM = """Return ONLY valid JSON with keys:
 people, companies, topics, commitments, relations, unresolved, stance, sentiment_shift, summary.
@@ -22,7 +23,7 @@ Only extract what is explicitly present in the text. Return empty lists when not
 
 _EXTRACTION_MODELS = parse_model_list("EXTRACTION_MODEL", "openrouter/owl-alpha,poolside/laguna-m.1:free")
 
-_EMPTY_EXTRACTION: dict[str, Any] = {
+_EMPTY_EXTRACTION: ExtractionResult = {
     "people": [],
     "companies": [],
     "topics": [],
@@ -35,9 +36,9 @@ _EMPTY_EXTRACTION: dict[str, Any] = {
 }
 
 
-async def extract_entities(text: str) -> dict[str, Any]:
+async def extract_entities(text: str) -> ExtractionResult:
     if not text.strip():
-        return dict(_EMPTY_EXTRACTION)
+        return {**_EMPTY_EXTRACTION}
 
     try:
         response = await chat(
@@ -49,12 +50,17 @@ async def extract_entities(text: str) -> dict[str, Any]:
             temperature=0.1,
             max_tokens=1200,
         )
-        return json.loads(extract_content(response))
-    except Exception:
-        return dict(_EMPTY_EXTRACTION)
+        content = extract_content(response)
+        return cast(ExtractionResult, json.loads(content))
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        print(f"Entity extraction: LLM returned malformed response — {exc}")
+        return {**_EMPTY_EXTRACTION}
+    except Exception as exc:
+        print(f"Entity extraction: API call failed — {exc}")
+        return {**_EMPTY_EXTRACTION}
 
 
-def has_meaningful_extraction(extracted: dict[str, Any]) -> bool:
+def has_meaningful_extraction(extracted: ExtractionResult) -> bool:
     return bool(
         extracted.get("topics")
         or extracted.get("relations")

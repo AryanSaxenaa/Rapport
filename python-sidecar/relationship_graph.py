@@ -1,6 +1,7 @@
 from datetime import date
 from typing import Any
 
+from hydra_db import AsyncHydraDB
 from hydradb_client import TENANT_ID, _hydradb_client, _with_retry, _to_plain_data
 
 
@@ -21,7 +22,7 @@ def _edge_color(rel_type: str) -> str:
 
 
 async def store_relations(
-    client: Any,
+    client: AsyncHydraDB | None,
     relations: list[dict[str, Any]],
     contact_email: str | None,
     interaction_date: str | None = None,
@@ -56,6 +57,9 @@ async def store_relations(
         })
 
     if not memories:
+        return
+
+    if not client:
         return
 
     await _with_retry(

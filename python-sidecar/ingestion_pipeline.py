@@ -1,7 +1,5 @@
-from contextlib import suppress
-
 from entity_extractor import extract_entities, has_meaningful_extraction
-from hydradb_client import write_interaction_to_hydradb
+from hydradb_client import write_interaction_to_hydradb, _hydradb_client
 from relationship_graph import store_relations
 
 
@@ -25,9 +23,9 @@ async def process_interaction(
         raw_text=text,
     )
 
-    from hydradb_client import _hydradb_client
-
     client = _hydradb_client()
     if client:
-        with suppress(Exception):
+        try:
             await store_relations(client, extracted.get("relations") or [], contact_email)
+        except Exception as exc:
+            print(f"Ingestion pipeline: store_relations failed (non-fatal) — {exc}")

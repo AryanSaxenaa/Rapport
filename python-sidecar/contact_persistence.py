@@ -3,12 +3,14 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from sidecar_types import ContactDict
+
 LOCAL_CONTACTS_PATH = Path(__file__).parent / "rapport_contacts.json"
 
 
-def normalize_contact(contact: dict[str, Any]) -> dict[str, Any]:
-    email = (contact.get("contactEmail") or contact.get("contact_email") or "").strip()
-    name = (contact.get("contactName") or contact.get("contact_name") or "").strip()
+def normalize_contact(contact: dict[str, Any]) -> ContactDict:
+    email = (contact.get("contactEmail") or "").strip()
+    name = (contact.get("contactName") or "").strip()
     company = (contact.get("company") or "").strip()
     return {
         "contactEmail": email,
@@ -24,7 +26,7 @@ def normalize_contact(contact: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def load_local_contacts() -> list[dict[str, Any]]:
+def load_local_contacts() -> list[ContactDict]:
     if not LOCAL_CONTACTS_PATH.exists():
         return []
     try:
@@ -37,13 +39,14 @@ def load_local_contacts() -> list[dict[str, Any]]:
 
 def save_local_contact(contact: dict[str, Any]) -> None:
     normalised = normalize_contact(contact)
-    if not normalised["contactEmail"]:
+    email = normalised.get("contactEmail", "")
+    if not email:
         return
 
     contacts = load_local_contacts()
-    by_email = {c["contactEmail"].lower(): c for c in contacts}
-    existing = by_email.get(normalised["contactEmail"].lower(), {})
-    by_email[normalised["contactEmail"].lower()] = {**existing, **normalised}
+    by_email = {c.get("contactEmail", "").lower(): c for c in contacts}
+    existing = by_email.get(email.lower(), ContactDict())
+    by_email[email.lower()] = {**existing, **normalised}
 
     LOCAL_CONTACTS_PATH.write_text(
         json.dumps({"contacts": list(by_email.values())}, indent=2),
@@ -51,22 +54,23 @@ def save_local_contact(contact: dict[str, Any]) -> None:
     )
 
 
-def demo_contacts() -> list[dict[str, Any]]:
+def demo_contacts() -> list[ContactDict]:
+    today = date.today().isoformat()
     return [
-        {
-            "contactEmail": "mira.voss@northstar-ledger.example",
-            "contactName": "Mira Voss",
-            "company": "Northstar Ledger",
-            "stance": "skeptic",
-            "lastInteraction": date.today().isoformat(),
-            "topics": ["security review", "rollout workload", "budget timing"],
-        },
-        {
-            "contactEmail": "jon.bell@apexfoundry.example",
-            "contactName": "Jon Bell",
-            "company": "Apex Foundry",
-            "stance": "champion",
-            "lastInteraction": date.today().isoformat(),
-            "topics": ["pilot scope", "executive sponsor"],
-        },
+        ContactDict(
+            contactEmail="mira.voss@northstar-ledger.example",
+            contactName="Mira Voss",
+            company="Northstar Ledger",
+            stance="skeptic",
+            lastInteraction=today,
+            topics=["security review", "rollout workload", "budget timing"],
+        ),
+        ContactDict(
+            contactEmail="jon.bell@apexfoundry.example",
+            contactName="Jon Bell",
+            company="Apex Foundry",
+            stance="champion",
+            lastInteraction=today,
+            topics=["pilot scope", "executive sponsor"],
+        ),
     ]

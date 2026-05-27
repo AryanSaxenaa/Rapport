@@ -5,7 +5,9 @@ from typing import Any
 from fastapi import APIRouter
 
 from audio_capture import AudioCapture, RecordingDisabled
+from contact_persistence import normalize_contact
 from ingestion_pipeline import process_interaction
+from sidecar_types import ContactDict
 from ws_manager import ConnectionManager
 
 
@@ -13,17 +15,11 @@ from ws_manager import ConnectionManager
 class RecordingSession:
     active: bool = False
     buffer: list[str] = field(default_factory=list)
-    contact: dict[str, Any] | None = None
-    capture: Any | None = None
+    contact: ContactDict | None = None
+    capture: AudioCapture | None = None
 
 
 router = APIRouter()
-
-
-def _on_task_error(clients: ConnectionManager, task: asyncio.Task) -> None:
-    exc = task.exception() if not task.cancelled() else None
-    if exc:
-        asyncio.create_task(clients.broadcast({"type": "error", "message": f"Background task failed: {exc}"}))
 
 
 def create_recording_routes(session: RecordingSession, clients: ConnectionManager) -> APIRouter:
@@ -39,7 +35,7 @@ def create_recording_routes(session: RecordingSession, clients: ConnectionManage
             return {"status": "disabled", "reason": str(exc)}
 
         session.active = True
-        session.contact = body
+        session.contact = normalize_contact(body)
         session.buffer = []
 
         async def on_text(text: str):
@@ -50,13 +46,13 @@ def create_recording_routes(session: RecordingSession, clients: ConnectionManage
                 task = asyncio.create_task(
                     process_interaction(
                         text=" ".join(session.buffer[-10:]),
-                        contact_email=contact.get("contactEmail") or contact.get("contact_email"),
-                        contact_name=contact.get("contactName") or contact.get("contact_name"),
+                        contact_email=contact.get("contactEmail"),
+                        contact_name=contact.get("contactName"),
                         company=contact.get("company"),
                         interaction_type="call",
                     )
                 )
-                task.add_done_callback(lambda t: _on_task_error(clients, t))
+                task.add_done_callback(lambda t: clients.on_task_error(t))
 
         session.capture = AudioCapture(on_text)
         session.capture.start()
@@ -73,13 +69,13 @@ def create_recording_routes(session: RecordingSession, clients: ConnectionManage
             task = asyncio.create_task(
                 process_interaction(
                     text=" ".join(session.buffer),
-                    contact_email=contact.get("contactEmail") or contact.get("contact_email"),
-                    contact_name=contact.get("contactName") or contact.get("contact_name"),
+                    contact_email=contact.get("contactEmail"),
+                    contact_name=contact.get("contactName"),
                     company=contact.get("company"),
                     interaction_type="call",
                 )
             )
-            task.add_done_callback(lambda t: _on_task_error(clients, t))
+            task.add_done_callback(lambda t: clients.on_task_error(t))
         await _push_transcript("Recording stopped. Processing final chunk.")
         return {"status": "stopped"}
 

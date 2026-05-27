@@ -14,9 +14,10 @@ from hydradb_client import (
     _to_plain_data,
     _with_retry,
 )
+from sidecar_types import ContactDict, ContactsResponse
 
 
-def _add_contact(contacts: list[dict[str, Any]], seen: set[str], contact: dict[str, Any]) -> None:
+def _add_contact(contacts: list[ContactDict], seen: set[str], contact: ContactDict) -> None:
     email = contact.get("contactEmail", "").lower()
     if not email or email in seen:
         return
@@ -24,7 +25,7 @@ def _add_contact(contacts: list[dict[str, Any]], seen: set[str], contact: dict[s
     contacts.append(contact)
 
 
-async def _iter_from_sub_tenants(client) -> list[dict[str, Any]]:
+async def _iter_from_sub_tenants(client) -> list[ContactDict]:
     """Fetch contacts via sub-tenant recall_preferences (parallel)."""
     try:
         raw = await _with_retry(lambda: client.tenant.get_sub_tenant_ids(tenant_id=TENANT_ID))
@@ -36,7 +37,7 @@ async def _iter_from_sub_tenants(client) -> list[dict[str, Any]]:
     if not contact_ids:
         return []
 
-    async def recall_one(sid: str) -> dict[str, Any] | None:
+    async def recall_one(sid: str) -> ContactDict | None:
         try:
             data = await _with_retry(
                 lambda s=sid: client.recall.recall_preferences(
@@ -67,16 +68,16 @@ async def _iter_from_sub_tenants(client) -> list[dict[str, Any]]:
     return [r for r in results if isinstance(r, dict)]
 
 
-def _normalize_contact_src(meta: dict[str, Any]) -> dict[str, Any]:
+def _normalize_contact_src(meta: dict[str, Any]) -> ContactDict:
     extracted = meta.get("extracted")
     extracted = extracted if isinstance(extracted, dict) else {}
     flat: dict[str, Any] = {**extracted, **meta}
     return normalize_contact(flat)
 
 
-async def _iter_from_full_recall(client) -> list[dict[str, Any]]:
+async def _iter_from_full_recall(client) -> list[ContactDict]:
     """Fallback: full_recall queries when sub-tenant path returns < 2 contacts."""
-    contacts: list[dict[str, Any]] = []
+    contacts: list[ContactDict] = []
     for query in ("contact", "email interaction", "meeting transcript"):
         try:
             data = await _with_retry(
@@ -100,24 +101,25 @@ async def _iter_from_full_recall(client) -> list[dict[str, Any]]:
                     meta = chunk["metadata"]
                 if meta.get("contact_email"):
                     contacts.append(_normalize_contact_src(meta))
-        except Exception:
+        except Exception as exc:
+            print(f"Contact repo: full_recall query '{query}' failed — {exc}")
             pass
     return contacts
 
 
-async def fetch_contacts() -> dict[str, Any]:
+async def fetch_contacts() -> ContactsResponse:
     """Return contacts from HydraDB with local/demo fallback."""
     local = load_local_contacts()
     client = _hydradb_client()
 
     if not client:
-        return {
-            "contacts": local or demo_contacts(),
-            "source": "local" if local else "demo",
-            "warning": "HydraDB API key not configured.",
-        }
+        return ContactsResponse(
+            contacts=local or demo_contacts(),
+            source="local" if local else "demo",
+            warning="HydraDB API key not configured.",
+        )
 
-    contacts: list[dict[str, Any]] = []
+    contacts: list[ContactDict] = []
     seen: set[str] = set()
 
     for c in local:
@@ -132,9 +134,9 @@ async def fetch_contacts() -> dict[str, Any]:
                 _add_contact(contacts, seen, c)
 
         if contacts:
-            return {"contacts": contacts, "source": "hydradb"}
-        return {"contacts": demo_contacts(), "source": "demo", "warning": "No contacts in HydraDB yet."}
+            return ContactsResponse(contacts=contacts, source="hydradb")
+        return ContactsResponse(contacts=demo_contacts(), source="demo", warning="No contacts in HydraDB yet.")
 
     except Exception as exc:
         fallback = local or demo_contacts()
-        return {"contacts": fallback, "source": "local" if local else "demo", "error": str(exc)}
+        return ContactsResponse(contacts=fallback, source="local" if local else "demo", error=str(exc))

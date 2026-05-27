@@ -8,7 +8,7 @@ import { FloatingOrb } from './components/FloatingOrb'
 import { RelationshipGraph } from './components/RelationshipGraph'
 import { SettingsPanel } from './components/SettingsPanel'
 import { useSidecarSocket } from './hooks/useSidecarSocket'
-import { useRapportStore } from './store/rapport-store'
+import { SIDECAR_URL, useRapportStore } from './store/rapport-store'
 import type { Contact, Brief } from './store/rapport-store'
 
 export function App() {
@@ -75,11 +75,11 @@ export function App() {
       const form = new FormData()
       form.append('file', file)
       try {
-        const res = await fetch('http://127.0.0.1:8765/ingest/file', { method: 'POST', body: form })
+        const res = await fetch(`${SIDECAR_URL}/ingest/file`, { method: 'POST', body: form })
         const data = await res.json() as { count?: number }
         total += data.count ?? 0
-      } catch {
-        throw new Error('Ingest failed — is the sidecar running?')
+      } catch (err) {
+        console.warn(`Rapport: ingest failed for ${file.name}`, err)
       }
     }
     return total

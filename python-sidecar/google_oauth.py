@@ -1,19 +1,26 @@
 """Shared Google OAuth helper for Gmail and Calendar."""
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+if TYPE_CHECKING:
+    from googleapiclient.discovery import Resource
+
 CREDENTIALS_PATH = Path(__file__).parent / "credentials.json"
 TOKEN_DIR = Path.home() / ".rapport"
 
 
 def get_service(api: str, version: str, scopes: list[str], token_filename: str) -> Any | None:
-    """Authenticate and return a Google API service, or None if not configured."""
+    """Authenticate and return a Google API service, or None if not configured.
+
+    Returns a googleapiclient.discovery.Resource (not typed for compatibility with
+    the library's dynamic method dispatch).
+    """
     if not CREDENTIALS_PATH.exists():
         return None
 
@@ -40,6 +47,6 @@ def get_service(api: str, version: str, scopes: list[str], token_filename: str) 
             return None
 
     TOKEN_DIR.mkdir(parents=True, exist_ok=True)
-    token_path.write_text(creds.to_json())
+    token_path.write_text(creds.to_json())  # type: ignore[union-attr]   # guaranteed non-None after auth flow above
 
     return build(api, version, credentials=creds)

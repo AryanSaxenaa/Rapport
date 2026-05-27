@@ -1,8 +1,13 @@
 import { create } from 'zustand'
+import type {
+  RecordingStartResult,
+  ImapConfig,
+  ImapResult,
+} from '../shared/types'
 
 export type DepStatus = { ok: boolean; reason: string | null }
 
-export type SidecarStatus_Deps = {
+export type SidecarStatusDeps = {
   hydradb: DepStatus
   openrouter: DepStatus
   microphone: DepStatus
@@ -78,14 +83,15 @@ export type Contact = {
   summary?: string
 }
 
-type ContactsResponse = {
+export type ContactsResponse = {
   contacts?: Contact[]
   source?: 'hydradb' | 'local' | 'demo' | string
   warning?: string
   error?: string
 }
 
-const SIDECAR_URL = 'http://127.0.0.1:8765'
+export const SIDECAR_URL = 'http://127.0.0.1:8765'
+export const SIDECAR_WS_URL = 'ws://127.0.0.1:8765'
 
 const demoContacts: Contact[] = [
   {
@@ -136,28 +142,22 @@ type RapportState = {
   contactsLoading: boolean
   contactsError: string | null
   contactsSource: string | null
-  ingestingEmails: boolean
   minimized: boolean
   graphData: GraphData
-  graphLoading: boolean
-  depStatus: SidecarStatus_Deps | null
-  setRecording: (value: boolean) => void
+  depStatus: SidecarStatusDeps | null
   setSidecarStatus: (value: RapportState['sidecarStatus']) => void
   setCommandOpen: (value: boolean) => void
   setSettingsOpen: (value: boolean) => void
   setActiveBrief: (brief: Brief | null) => void
-  setBriefLoading: (loading: boolean) => void
   setMinimized: (value: boolean) => void
   pushTranscript: (line: string) => void
-  setDetectedContacts: (contacts: string[]) => void
   setSelectedContact: (contact: Contact) => void
   fetchContacts: () => Promise<void>
   fetchGraph: () => Promise<void>
   fetchDepStatus: () => Promise<void>
   configureSidecar: (keys: Record<string, string>) => Promise<void>
-  ingestEmails: () => Promise<void>
-  ingestImap: (cfg: { host: string; port: number; username: string; password: string; since_days: number }) => Promise<{ count: number }>
-  startRecording: (contact: Contact) => Promise<{ status: string; reason?: string }>
+  ingestImap: (cfg: ImapConfig) => Promise<{ count: number }>
+  startRecording: (contact: Contact) => Promise<RecordingStartResult>
   stopRecording: () => Promise<void>
   fetchBrief: (contactEmail: string, contactName: string, company: string) => Promise<Brief | null>
 }
@@ -184,21 +184,16 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   contactsLoading: false,
   contactsError: null,
   contactsSource: null,
-  ingestingEmails: false,
   graphData: { nodes: [], edges: [] },
-  graphLoading: false,
   depStatus: null,
 
-  setRecording: (value) => set({ isRecording: value }),
   setSidecarStatus: (value) => set({ sidecarStatus: value }),
   setCommandOpen: (value) => set({ commandOpen: value }),
   setSettingsOpen: (value) => set({ settingsOpen: value }),
   setActiveBrief: (brief) => set({ activeBrief: brief }),
-  setBriefLoading: (loading) => set({ briefLoading: loading }),
   setMinimized: (value) => set({ minimized: value }),
   pushTranscript: (line) =>
     set((state) => ({ liveTranscript: [...state.liveTranscript.slice(-7), line] })),
-  setDetectedContacts: (contacts) => set({ detectedContacts: contacts }),
   setSelectedContact: (contact) => set({ selectedContact: contact }),
 
   fetchContacts: async () => {
@@ -226,21 +221,21 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   },
 
   fetchGraph: async () => {
-    set({ graphLoading: true })
     try {
       const data = await sidecarRequest<GraphData>('/graph')
-      set({ graphData: data, graphLoading: false })
-    } catch {
-      set({ graphLoading: false })
+      set({ graphData: data })
+    } catch (err) {
+      console.warn('Rapport: graph fetch failed', err)
     }
   },
 
   fetchDepStatus: async () => {
     try {
-      const data = await sidecarRequest<SidecarStatus_Deps>('/status')
+      const data = await sidecarRequest<SidecarStatusDeps>('/status')
       set({ depStatus: data })
-    } catch {
-      /* sidecar offline — leave depStatus null */
+    } catch (err) {
+      set({ depStatus: null })
+      console.warn('Rapport: dep status fetch failed (sidecar offline?)', err)
     }
   },
 
@@ -251,12 +246,15 @@ export const useRapportStore = create<RapportState>((set, get) => ({
       body: JSON.stringify(keys),
     })
     // Refresh dep status after configure
-    const data = await sidecarRequest<SidecarStatus_Deps>('/status').catch(() => null)
+    const data = await sidecarRequest<SidecarStatusDeps>('/status').catch((err) => {
+      console.warn('Rapport: status refresh after configure failed', err)
+      return null
+    })
     if (data) set({ depStatus: data })
   },
 
   ingestImap: async (cfg) => {
-    const data = await sidecarRequest<{ count: number; status: string }>('/ingest/imap', {
+    const data = await sidecarRequest<ImapResult>('/ingest/imap', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cfg),
@@ -264,20 +262,8 @@ export const useRapportStore = create<RapportState>((set, get) => ({
     return { count: data.count ?? 0 }
   },
 
-  ingestEmails: async () => {
-    set({ ingestingEmails: true })
-    try {
-      await sidecarRequest('/ingest/emails', { method: 'POST' })
-      await get().fetchContacts()
-    } catch {
-      /* surfaced via WS error events */
-    } finally {
-      set({ ingestingEmails: false })
-    }
-  },
-
   startRecording: async (contact) => {
-    const result = await sidecarRequest<{ status: string; reason?: string }>('/recording/start', {
+    const result = await sidecarRequest<RecordingStartResult>('/recording/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contact),

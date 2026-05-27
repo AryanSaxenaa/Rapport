@@ -3,7 +3,7 @@ import os
 
 import httpx
 
-_RETRYABLE = {429, 500, 503}
+from openrouter_client import RETRYABLE_STATUS_CODES
 
 
 async def transcribe_audio_chunk(pcm_bytes: bytes) -> str:
@@ -24,7 +24,7 @@ async def transcribe_audio_chunk(pcm_bytes: bytes) -> str:
                 data = response.json()
                 return data.get("text", "")
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code not in _RETRYABLE or attempt == 3:
+            if exc.response.status_code not in RETRYABLE_STATUS_CODES or attempt == 3:
                 return ""
         except (httpx.ConnectError, httpx.TimeoutException):
             if attempt == 3:

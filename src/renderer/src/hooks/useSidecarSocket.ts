@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
+import type { WsMessage } from '../shared/types'
+import { SIDECAR_WS_URL } from '../store/rapport-store'
 
 type Handlers = {
   onTranscript: (text: string) => void
@@ -21,7 +23,7 @@ export function useSidecarSocket(handlers: Handlers) {
     }
 
     try {
-      const ws = new WebSocket('ws://127.0.0.1:8765/ws/transcript')
+      const ws = new WebSocket(`${SIDECAR_WS_URL}/ws/transcript`)
       wsRef.current = ws
 
       ws.onopen = () => {
@@ -35,12 +37,12 @@ export function useSidecarSocket(handlers: Handlers) {
 
       ws.onmessage = (event) => {
         try {
-          const payload = JSON.parse(event.data as string) as { type: string; text?: string; data?: unknown; message?: string }
-          if (payload.type === 'transcript' && payload.text) handlersRef.current.onTranscript(payload.text)
-          if (payload.type === 'brief' && payload.data) handlersRef.current.onBrief(payload.data)
-          if (payload.type === 'error' && payload.message) handlersRef.current.onError(payload.message)
-        } catch {
-          /* ignore malformed frames */
+          const payload = JSON.parse(event.data as string) as WsMessage
+          if (payload.type === 'transcript') handlersRef.current.onTranscript(payload.text)
+          if (payload.type === 'brief') handlersRef.current.onBrief(payload.data)
+          if (payload.type === 'error') handlersRef.current.onError(payload.message)
+        } catch (err) {
+          console.warn('Rapport: malformed WS frame', err)
         }
       }
 

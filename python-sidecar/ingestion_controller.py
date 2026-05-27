@@ -13,12 +13,6 @@ from ws_manager import ConnectionManager
 router = APIRouter()
 
 
-def _on_task_error(clients: ConnectionManager, task: asyncio.Task) -> None:
-    exc = task.exception() if not task.cancelled() else None
-    if exc:
-        asyncio.create_task(clients.broadcast({"type": "error", "message": f"Background task failed: {exc}"}))
-
-
 def create_ingestion_routes(clients: ConnectionManager) -> APIRouter:
 
     async def _ingest_email_list(emails: list[dict[str, Any]]) -> None:
@@ -37,7 +31,7 @@ def create_ingestion_routes(clients: ConnectionManager) -> APIRouter:
 
         tasks = [asyncio.create_task(process_one(e)) for e in emails]
         for t in tasks:
-            t.add_done_callback(lambda task: _on_task_error(clients, task))
+            t.add_done_callback(lambda task: clients.on_task_error(task))
         await asyncio.gather(*tasks, return_exceptions=True)
         await clients.broadcast({"type": "ingest_complete", "count": len(emails)})
 
@@ -52,13 +46,13 @@ def create_ingestion_routes(clients: ConnectionManager) -> APIRouter:
         if not emails:
             return {"status": "no_emails", "count": 0}
         task = asyncio.create_task(_ingest_email_list(emails))
-        task.add_done_callback(lambda t: _on_task_error(clients, t))
+        task.add_done_callback(lambda t: clients.on_task_error(t))
         return {"status": "ingestion started", "count": len(emails)}
 
     @router.post("/ingest/emails")
     async def ingest_emails_endpoint():
         task = asyncio.create_task(_ingest_emails_background())
-        task.add_done_callback(lambda t: _on_task_error(clients, t))
+        task.add_done_callback(lambda t: clients.on_task_error(t))
         return {"status": "ingestion started"}
 
     async def _ingest_emails_background() -> None:
@@ -87,7 +81,7 @@ def create_ingestion_routes(clients: ConnectionManager) -> APIRouter:
             return {"status": "no_emails", "count": 0}
 
         task = asyncio.create_task(_ingest_email_list(emails))
-        task.add_done_callback(lambda t: _on_task_error(clients, t))
+        task.add_done_callback(lambda t: clients.on_task_error(t))
         return {"status": "ingestion started", "count": len(emails)}
 
     return router

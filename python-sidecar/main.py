@@ -17,6 +17,7 @@ from hydradb_client import API_KEY as HYDRADB_API_KEY
 from ingestion_controller import create_ingestion_routes
 from recording_controller import RecordingSession, create_recording_routes
 from relationship_graph import build_graph
+from sidecar_types import MeetingInfo
 from ws_manager import ConnectionManager
 
 
@@ -64,7 +65,7 @@ async def get_status():
 @app.post("/configure")
 async def configure(body: dict[str, Any]):
     env_path = Path(__file__).parent / ".env"
-    allowed_keys = {"HYDRA_DB_API_KEY", "HYDRADB_API_KEY", "HYDRA_DB_TENANT_ID", "OPENROUTER_API_KEY"}
+    allowed_keys = {"HYDRA_DB_API_KEY", "HYDRA_DB_TENANT_ID", "OPENROUTER_API_KEY"}
     updates = {k: v for k, v in body.items() if k in allowed_keys and v}
     if not updates:
         return {"status": "no_changes"}
@@ -116,6 +117,8 @@ def _check_mic() -> tuple[bool, str | None]:
         devices = sd.query_devices()
         has_input = any(d.get("max_input_channels", 0) > 0 for d in devices)
         return (True, None) if has_input else (False, "No input devices found")
+    except ImportError:
+        return False, "sounddevice not installed — run: pip install sounddevice"
     except Exception as exc:
         return False, str(exc)
 
@@ -126,11 +129,11 @@ def _check_mic() -> tuple[bool, str | None]:
 
 @app.on_event("startup")
 async def startup():
-    async def on_upcoming_meeting(meeting_info: dict[str, Any]):
+    async def on_upcoming_meeting(meeting_info: MeetingInfo):
         brief = await generate_pre_call_brief(
-            contact_email=meeting_info["contact_email"],
-            contact_name=meeting_info["contact_name"],
-            company=meeting_info["company"],
+            contact_email=meeting_info.get("contact_email", ""),
+            contact_name=meeting_info.get("contact_name", ""),
+            company=meeting_info.get("company", ""),
         )
         await _clients.broadcast({"type": "brief", "data": {**brief, "trigger": "calendar"}})
 

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google_oauth import get_service
+from sidecar_types import MeetingInfo
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 POLL_INTERVAL_SECONDS = 60
@@ -22,7 +23,7 @@ def _parse_attendee(attendee: dict[str, Any]) -> dict[str, str]:
 
 
 async def poll_for_upcoming_meetings(
-    on_upcoming_meeting: Callable[[dict[str, Any]], Awaitable[None]],
+    on_upcoming_meeting: Callable[[MeetingInfo], Awaitable[None]],
 ):
     service = _get_calendar_service()
     if not service:

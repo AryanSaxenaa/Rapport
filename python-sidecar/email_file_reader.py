@@ -2,12 +2,10 @@
 
 import email
 import email.policy
-import mailbox
 from email.message import Message
-from io import BytesIO
 from typing import Any
 
-from html_utils import strip_html
+from html_utils import derive_company, parse_from_header, strip_html
 
 
 def _extract_body(msg: Message) -> str:
@@ -56,19 +54,13 @@ def _parse_message(msg: Message) -> dict[str, Any] | None:
     date_str = msg.get("Date", "")
     msg_id = msg.get("Message-ID", "")
 
-    contact_name = ""
-    contact_email = ""
-    if "<" in from_header:
-        contact_name = from_header.split("<")[0].strip().strip('"')
-        contact_email = from_header.split("<")[1].rstrip(">").strip()
-    else:
-        contact_email = from_header.strip()
+    contact_name, contact_email = parse_from_header(from_header)
 
     body = _extract_body(msg)
     if not body:
         return None
 
-    company = contact_email.split("@")[-1] if "@" in contact_email else ""
+    company = derive_company(contact_email)
 
     return {
         "id": msg_id,
@@ -94,20 +86,6 @@ def parse_eml(data: bytes) -> dict[str, Any] | None:
 
 def parse_mbox(data: bytes) -> list[dict[str, Any]]:
     """Parse an .mbox file. Returns list of canonical Email dicts."""
-    buf = BytesIO(data)
-
-    class _BytesMbox(mailbox.mbox):
-        def __init__(self, buf: BytesIO):
-            self._buf = buf
-            self._toc: dict = {}
-            self._next_key = 0
-            self._pending: bool = False
-            self._pending_sync: bool = False
-            self._locked: bool = False
-            self._file = buf
-            self._file_length: int | None = None
-            self._generate_toc()
-
     results: list[dict[str, Any]] = []
     raw_text = data.decode("utf-8", errors="replace")
     current: list[str] = []

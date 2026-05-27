@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google_oauth import get_service
-from html_utils import strip_html
+from html_utils import derive_company, parse_from_header, strip_html
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -42,15 +42,8 @@ def _parse_email_message(msg: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     from_header = headers.get("from", "")
-    contact_name = ""
-    contact_email = ""
-    if "<" in from_header:
-        contact_name = from_header.split("<")[0].strip().strip('"')
-        contact_email = from_header.split("<")[1].rstrip(">")
-    else:
-        contact_email = from_header.strip()
-
-    company = contact_email.split("@")[-1] if "@" in contact_email else ""
+    contact_name, contact_email = parse_from_header(from_header)
+    company = derive_company(contact_email)
 
     return {
         "id": msg.get("id"),

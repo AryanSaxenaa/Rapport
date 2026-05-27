@@ -12,6 +12,7 @@ from hydradb_client import (
     _to_plain_data,
 )
 from openrouter_client import chat, extract_content, parse_model_list
+from sidecar_types import OpenRouterResponse
 
 _BRIEF_MODELS = parse_model_list("BRIEF_MODEL", "openrouter/owl-alpha,poolside/laguna-m.1:free")
 
@@ -77,7 +78,7 @@ async def _recall_contact_context(contact_email: str, contact_name: str, company
     return _format_recall_context(prefs, knowledge)
 
 
-def _format_recall_context(prefs: Any, knowledge: Any) -> str:
+def _format_recall_context(prefs: dict[str, Any], knowledge: dict[str, Any]) -> str:
     lines: list[str] = []
     lines.append("=== PREFERENCES & STANCE ===")
     prefs_plain = _to_plain_data(prefs)

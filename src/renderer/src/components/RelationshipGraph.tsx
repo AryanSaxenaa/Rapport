@@ -46,7 +46,6 @@ export function RelationshipGraph({ nodes, edges }: { nodes: GraphNode[]; edges:
 
     const defs = svg.append('defs')
 
-    // Arrow markers per color
     Object.entries(EDGE_COLORS).forEach(([key, color]) => {
       defs.append('marker')
         .attr('id', `arrow-${key}`)

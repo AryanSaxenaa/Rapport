@@ -1,8 +1,13 @@
 import asyncio
 import os
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import TypeVar, cast
 
 import httpx
+
+from sidecar_types import OpenRouterResponse
+
+T = TypeVar("T")
 
 RETRYABLE_STATUS_CODES = {429, 500, 503}
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -17,7 +22,7 @@ def parse_model_list(env_var: str, default: str) -> list[str]:
     return [m.strip() for m in (os.getenv(env_var) or default).split(",") if m.strip()]
 
 
-async def _with_retry[T](operation, max_retries: int = 3, base_delay: float = 2.0) -> T:
+async def _with_retry(operation: Callable[[], Awaitable[T]], max_retries: int = 3, base_delay: float = 2.0) -> T:
     for attempt in range(1, max_retries + 1):
         try:
             return await operation()
@@ -38,12 +43,12 @@ async def chat(
     temperature: float = 0.2,
     max_tokens: int = 1500,
     timeout: float = DEFAULT_TIMEOUT,
-) -> dict[str, Any]:
+) -> OpenRouterResponse:
     api_key = _get_api_key()
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY not set")
 
-    async def _call() -> dict[str, Any]:
+    async def _call() -> OpenRouterResponse:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 OPENROUTER_URL,
@@ -60,10 +65,10 @@ async def chat(
                 },
             )
             response.raise_for_status()
-            return response.json()
+            return cast(OpenRouterResponse, response.json())
 
     return await _with_retry(_call)
 
 
-def extract_content(response: dict[str, Any]) -> str:
+def extract_content(response: OpenRouterResponse) -> str:
     return response["choices"][0]["message"]["content"]

@@ -58,9 +58,8 @@ async function startPythonSidecar() {
     cwd: path.join(root, 'python-sidecar'),
     env: {
       ...process.env,
-      HYDRA_DB_API_KEY: process.env.HYDRA_DB_API_KEY ?? process.env.HYDRADB_API_KEY ?? '',
-      HYDRA_DB_TENANT_ID: process.env.HYDRA_DB_TENANT_ID ?? process.env.HYDRADB_TENANT_ID ?? '',
-      HYDRADB_TENANT_ID: process.env.HYDRADB_TENANT_ID ?? process.env.HYDRA_DB_TENANT_ID ?? '',
+      HYDRA_DB_API_KEY: process.env.HYDRA_DB_API_KEY ?? '',
+      HYDRA_DB_TENANT_ID: process.env.HYDRA_DB_TENANT_ID ?? '',
       OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ?? '',
       MY_EMAIL: process.env.MY_EMAIL ?? ''
     }

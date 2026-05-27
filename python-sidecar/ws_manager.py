@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import suppress
 from typing import Any
 
@@ -21,3 +22,8 @@ class ConnectionManager:
                 await ws.send_json(payload)
             except Exception:
                 self.remove(ws)
+
+    def on_task_error(self, task: asyncio.Task) -> None:
+        exc = task.exception() if not task.cancelled() else None
+        if exc:
+            asyncio.create_task(self.broadcast({"type": "error", "message": f"Background task failed: {exc}"}))

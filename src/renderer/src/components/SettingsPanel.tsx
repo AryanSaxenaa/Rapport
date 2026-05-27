@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle, Database, Mic, RefreshCw, Server, Wifi, X } from 'lucide-react'
 import { useRapportStore } from '../store/rapport-store'
-import type { SidecarStatus_Deps } from '../store/rapport-store'
+import type { SidecarStatusDeps } from '../store/rapport-store'
 
 const DEP_ICONS: Record<string, React.ReactNode> = {
   hydradb: <Database size={12} />,
@@ -73,7 +73,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <p className="settings-dim">Sidecar offline or unreachable.</p>
         ) : (
           <div className="dep-status-list">
-            {(Object.keys(DEP_LABELS) as Array<keyof SidecarStatus_Deps>).map((key) => {
+            {(Object.keys(DEP_LABELS) as Array<keyof SidecarStatusDeps>).map((key) => {
               const dep = depStatus[key]
               return (
                 <div key={key} className="dep-row">

@@ -1,15 +1,19 @@
 import asyncio
 import os
+from collections.abc import Awaitable, Callable
 from datetime import date
-from typing import Any
+from typing import Any, TypeVar, overload
 
 from hydra_db import AsyncHydraDB
 from hydra_db.core import ApiError
 
 from contact_persistence import normalize_contact, save_local_contact
+from sidecar_types import ErrorPayload, ExtractionResult, ContactDict
+
+T = TypeVar("T")
 
 TENANT_ID = os.getenv("HYDRA_DB_TENANT_ID") or os.getenv("HYDRADB_TENANT_ID") or "orb"
-API_KEY = os.getenv("HYDRA_DB_API_KEY") or os.getenv("HYDRADB_API_KEY")
+API_KEY = os.getenv("HYDRA_DB_API_KEY")
 RETRYABLE_STATUS_CODES = {429, 500, 503}
 
 
@@ -24,7 +28,7 @@ def _hydradb_client() -> AsyncHydraDB | None:
     return AsyncHydraDB(token=API_KEY)
 
 
-async def _with_retry(operation, max_retries: int = 3):
+async def _with_retry(operation: Callable[[], Awaitable[T]], max_retries: int = 3) -> T:
     for attempt in range(1, max_retries + 1):
         try:
             return await operation()
@@ -36,19 +40,32 @@ async def _with_retry(operation, max_retries: int = 3):
     raise RuntimeError("HydraDB retry loop exhausted")
 
 
-def _error_payload(exc: Exception) -> dict[str, Any]:
+def _error_payload(exc: Exception) -> ErrorPayload:
     if isinstance(exc, ApiError):
         body = getattr(exc, "body", None)
         detail = body.get("detail") if isinstance(body, dict) else None
         return {
             "status_code": getattr(exc, "status_code", None),
             "error_code": detail.get("error_code") if isinstance(detail, dict) else None,
-            "message": detail.get("message") if isinstance(detail, dict) else str(exc),
+            "message": (detail.get("message") if isinstance(detail, dict) else None) or str(exc),
         }
     return {"message": str(exc)}
 
 
+@overload
+def _to_plain_data(value: dict[str, Any]) -> dict[str, Any]: ...
+@overload
+def _to_plain_data(value: None) -> None: ...
+@overload
+def _to_plain_data(value: str) -> str: ...
+@overload
+def _to_plain_data(value: int) -> int: ...
 def _to_plain_data(value: Any) -> Any:
+    """Convert HydraDB SDK response objects to plain dicts.
+
+    Handles Pydantic v1 (.dict()) and v2 (.model_dump()) models.
+    Scalars pass through unchanged.
+    """
     if hasattr(value, "model_dump"):
         return value.model_dump(mode="json")
     if hasattr(value, "dict"):
@@ -60,7 +77,7 @@ async def write_interaction_to_hydradb(
     contact_email: str | None,
     contact_name: str | None,
     company: str | None,
-    extracted: dict[str, Any],
+    extracted: ExtractionResult,
     interaction_type: str,
     raw_text: str,
 ) -> dict[str, Any]:
@@ -132,7 +149,8 @@ async def write_interaction_to_hydradb(
                         }],
                     )
                 )
-            except Exception:
+            except Exception as exc:
+                print(f"HydraDB: manifest write failed (non-fatal) — {exc}")
                 pass
 
     except Exception as exc:

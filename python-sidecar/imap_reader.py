@@ -4,6 +4,7 @@ import imaplib
 import ssl
 from datetime import datetime, timedelta
 from email import policy as email_policy
+from email.message import Message as _EmailMessage
 from typing import Any
 
 from html_utils import strip_html
@@ -54,7 +55,8 @@ def fetch_via_imap(
                 parsed = _parse_message(msg)
                 if parsed:
                     results.append(parsed)
-            except Exception:
+            except Exception as exc:
+                print(f"IMAP: failed to parse message {num.decode() if isinstance(num, bytes) else num} — {exc}")
                 continue
     finally:
         try:
@@ -66,7 +68,7 @@ def fetch_via_imap(
     return results
 
 
-def _parse_message(msg: Any) -> dict[str, Any] | None:
+def _parse_message(msg: _EmailMessage) -> dict[str, Any] | None:
     subject = str(msg.get("subject") or "")
     from_addr = str(msg.get("from") or "")
     date_str = str(msg.get("date") or "")
@@ -88,6 +90,11 @@ def _parse_message(msg: Any) -> dict[str, Any] | None:
 
 
 def _extract_body(msg: Any) -> str:
+    """Extract plain-text body from an email message.
+
+    Uses email.message.Message which has incomplete type stubs for runtime
+    methods like get_content(), get_content_type(), get_payload(), and walk().
+    """
     plain = ""
     html_body = ""
     if msg.is_multipart():

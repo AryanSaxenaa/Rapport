@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { CheckCircle, ExternalLink, Key, Loader2 } from 'lucide-react'
 import { useRapportStore } from '../store/rapport-store'
-import type { SidecarStatus_Deps } from '../store/rapport-store'
+import type { SidecarStatusDeps } from '../store/rapport-store'
 import './FirstRunWizard.css'
 
-export function FirstRunWizard({ depStatus, onComplete }: { depStatus: SidecarStatus_Deps; onComplete: () => void }) {
+export function FirstRunWizard({ depStatus, onComplete }: { depStatus: SidecarStatusDeps; onComplete: () => void }) {
   const { configureSidecar } = useRapportStore()
 
   const needsHydraDB = !depStatus.hydradb.ok
@@ -22,7 +22,6 @@ export function FirstRunWizard({ depStatus, onComplete }: { depStatus: SidecarSt
     const keys: Record<string, string> = {}
     if (needsHydraDB && hydraKey.trim()) {
       keys['HYDRA_DB_API_KEY'] = hydraKey.trim()
-      keys['HYDRADB_API_KEY'] = hydraKey.trim()
       if (hydraTenant.trim()) keys['HYDRA_DB_TENANT_ID'] = hydraTenant.trim()
     }
     if (needsOpenRouter && openrouterKey.trim()) {

@@ -14,6 +14,7 @@ except ImportError:
     _HAS_SOUNDDEVICE = False
 
 from transcription import transcribe_audio_chunk
+from sidecar_types import DeviceInfo
 
 SAMPLE_RATE = 16000
 CHUNK_SECONDS = 5
@@ -27,7 +28,7 @@ class RecordingDisabled(Exception):
         self.reason = reason
 
 
-def _list_input_devices() -> list[dict[str, Any]]:
+def _list_input_devices() -> list[DeviceInfo]:
     if not _HAS_SOUNDDEVICE:
         return []
     devices = sd.query_devices()
@@ -69,7 +70,6 @@ class AudioCapture:
 
     @staticmethod
     def check_available() -> None:
-        """Raise RecordingDisabled if prerequisites are missing."""
         if not _HAS_SOUNDDEVICE:
             raise RecordingDisabled(
                 "sounddevice not installed — run: pip install sounddevice"

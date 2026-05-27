@@ -8,7 +8,7 @@ from dotenv import dotenv_values, load_dotenv, set_key
 
 load_dotenv(override=True)
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from brief_generator import generate_pre_call_brief
@@ -138,7 +138,12 @@ async def get_graph():
 
 @app.get("/brief/{contact_email}")
 async def get_brief(contact_email: str, contact_name: str, company: str):
-    return await generate_pre_call_brief(contact_email, contact_name, company)
+    try:
+        return await generate_pre_call_brief(contact_email, contact_name, company)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Brief generation failed: {exc}")
 
 
 # ---------------------------------------------------------------------------

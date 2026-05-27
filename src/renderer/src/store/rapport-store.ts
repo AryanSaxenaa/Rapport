@@ -85,42 +85,13 @@ export type Contact = {
 
 export type ContactsResponse = {
   contacts?: Contact[]
-  source?: 'hydradb' | 'local' | 'demo' | string
+  source?: string
   warning?: string
   error?: string
 }
 
 export const SIDECAR_URL = 'http://127.0.0.1:8765'
 export const SIDECAR_WS_URL = 'ws://127.0.0.1:8765'
-
-const demoContacts: Contact[] = [
-  {
-    contactEmail: 'mira.voss@northstar-ledger.example',
-    contactName: 'Mira Voss',
-    company: 'Northstar Ledger',
-    stance: 'skeptic',
-    lastInteraction: new Date().toISOString().slice(0, 10),
-    topics: ['security review', 'rollout workload', 'budget timing'],
-  },
-  {
-    contactEmail: 'jon.bell@apexfoundry.example',
-    contactName: 'Jon Bell',
-    company: 'Apex Foundry',
-    stance: 'champion',
-    lastInteraction: new Date().toISOString().slice(0, 10),
-    topics: ['pilot scope', 'executive sponsor'],
-  },
-]
-
-const normalizeContactsResponse = (data?: ContactsResponse): ContactsResponse => {
-  const contacts = data?.contacts?.filter((c) => c.contactEmail && c.contactName) ?? []
-  if (contacts.length > 0) return { ...data, contacts }
-  return {
-    contacts: demoContacts,
-    source: data?.source ?? 'demo',
-    warning: data?.warning ?? data?.error ?? 'Showing demo contacts — no stored contacts found yet.',
-  }
-}
 
 const sidecarRequest = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(`${SIDECAR_URL}${path}`, init)
@@ -202,22 +173,21 @@ export const useRapportStore = create<RapportState>((set, get) => ({
     set({ contactsLoading: true, contactsError: null })
     try {
       const data = await sidecarRequest<ContactsResponse>('/contacts')
-      const normalized = normalizeContactsResponse(data)
-      const list = normalized.contacts ?? demoContacts
+      const contacts = data?.contacts?.filter((c) => c.contactEmail && c.contactName) ?? []
       set({
-        contacts: list,
+        contacts,
         contactsLoading: false,
-        contactsSource: normalized.source ?? null,
-        contactsError: normalized.error ?? normalized.warning ?? null,
-        selectedContact: list.length > 0 ? list[0] : defaultContact,
+        contactsSource: data?.source ?? null,
+        contactsError: data?.error ?? data?.warning ?? null,
+        selectedContact: contacts.length > 0 ? contacts[0] : defaultContact,
       })
     } catch (err) {
       set({
-        contacts: demoContacts,
+        contacts: [],
         contactsLoading: false,
-        contactsSource: 'demo',
-        contactsError: `Could not reach sidecar. Showing demo contacts. ${String(err)}`,
-        selectedContact: demoContacts[0],
+        contactsSource: null,
+        contactsError: `Failed to load contacts: sidecar unreachable. ${String(err)}`,
+        selectedContact: defaultContact,
       })
     }
   },

@@ -7,7 +7,7 @@ stored metadata — never decoded from the sub-tenant ID string (lossy).
 import asyncio
 from typing import Any
 
-from contact_persistence import normalize_contact, load_local_contacts, demo_contacts
+from contact_persistence import normalize_contact, load_local_contacts
 from hydradb_client import (
     TENANT_ID,
     _hydradb_client,
@@ -108,21 +108,25 @@ async def _iter_from_full_recall(client) -> list[ContactDict]:
 
 
 async def fetch_contacts() -> ContactsResponse:
-    """Return contacts from HydraDB with local/demo fallback."""
-    local = load_local_contacts()
+    """Return contacts from HydraDB with local persistence as a cache layer.
+
+    Returns an empty contacts array with an informative error when HydraDB
+    is unreachable or unconfigured — never fabricates contacts.
+    """
     client = _hydradb_client()
 
     if not client:
         return ContactsResponse(
-            contacts=local or demo_contacts(),
-            source="local" if local else "demo",
-            warning="HydraDB API key not configured.",
+            contacts=load_local_contacts(),
+            source="local",
+            error="HydraDB API key not configured.",
         )
 
     contacts: list[ContactDict] = []
     seen: set[str] = set()
 
-    for c in local:
+    # Seed with local cache so previously-ingested contacts are always visible.
+    for c in load_local_contacts():
         _add_contact(contacts, seen, c)
 
     try:
@@ -132,11 +136,15 @@ async def fetch_contacts() -> ContactsResponse:
         if len(contacts) < 2:
             for c in await _iter_from_full_recall(client):
                 _add_contact(contacts, seen, c)
-
-        if contacts:
-            return ContactsResponse(contacts=contacts, source="hydradb")
-        return ContactsResponse(contacts=demo_contacts(), source="demo", warning="No contacts in HydraDB yet.")
-
     except Exception as exc:
-        fallback = local or demo_contacts()
-        return ContactsResponse(contacts=fallback, source="local" if local else "demo", error=str(exc))
+        if contacts:
+            return ContactsResponse(contacts=contacts, source="local", error=f"HydraDB query failed: {exc}")
+        return ContactsResponse(source="hydradb", error=f"HydraDB query failed: {exc}")
+
+    if not contacts:
+        return ContactsResponse(
+            source="hydradb",
+            warning="No contacts found in HydraDB. Ingest emails or start a recording to populate your relationship graph.",
+        )
+
+    return ContactsResponse(contacts=contacts, source="hydradb")

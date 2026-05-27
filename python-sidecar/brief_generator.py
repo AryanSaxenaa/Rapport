@@ -13,7 +13,6 @@ from hydradb_client import (
     _to_plain_data,
 )
 from openrouter_client import chat, extract_content, parse_model_list
-from sidecar_types import OpenRouterResponse
 
 _BRIEF_MODELS = parse_model_list("BRIEF_MODEL", "openrouter/owl-alpha,poolside/laguna-m.1:free")
 
@@ -23,24 +22,21 @@ _FENCE_RE = re.compile(r"^```[a-z]*\n?", re.MULTILINE)
 
 async def generate_pre_call_brief(contact_email: str, contact_name: str, company: str) -> dict[str, Any]:
     context = await _recall_contact_context(contact_email, contact_name, company)
-    try:
-        response = await chat(
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"Create a pre-call brief as JSON for {contact_name} at {company}.\n"
-                    f"Use this recalled context:\n{context}\n\n"
-                    "Return keys: contactName, company, currentStance, stanceShiftNote, topConcerns, "
-                    "communicationStyle, talkingPoints, landmines, lastInteraction, powerNote."
-                ),
-            }],
-            models=_BRIEF_MODELS,
-            temperature=0.2,
-            max_tokens=1500,
-        )
-        return json.loads(_strip_json_fences(extract_content(response)))
-    except Exception:
-        return _fallback_brief(contact_name, company, context)
+    response = await chat(
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Create a pre-call brief as JSON for {contact_name} at {company}.\n"
+                f"Use this recalled context:\n{context}\n\n"
+                "Return keys: contactName, company, currentStance, stanceShiftNote, topConcerns, "
+                "communicationStyle, talkingPoints, landmines, lastInteraction, powerNote."
+            ),
+        }],
+        models=_BRIEF_MODELS,
+        temperature=0.2,
+        max_tokens=1500,
+    )
+    return json.loads(_strip_json_fences(extract_content(response)))
 
 
 def _strip_json_fences(text: str) -> str:
@@ -51,7 +47,7 @@ def _strip_json_fences(text: str) -> str:
 
 async def _recall_contact_context(contact_email: str, contact_name: str, company: str) -> str:
     if not API_KEY:
-        return "HydraDB key missing. Using local demo context."
+        return "No HydraDB context available — API key not configured."
 
     client = _hydradb_client()
     if not client:
@@ -116,20 +112,4 @@ def _format_recall_context(prefs: dict[str, Any], knowledge: dict[str, Any]) -> 
     return "\n".join(lines)[:12000]
 
 
-def _fallback_brief(contact_name: str, company: str, context: str) -> dict[str, Any]:
-    return {
-        "contactName": contact_name,
-        "company": company,
-        "currentStance": "neutral",
-        "stanceShiftNote": "No confirmed recent stance shift. Treat open questions as active risk.",
-        "topConcerns": ["Security review", "rollout workload", "budget timing"],
-        "communicationStyle": "Use compact written summaries with owners, dates, and explicit asks.",
-        "talkingPoints": [
-            "Confirm the current approval owner.",
-            "Ask which risk would block the next step.",
-            "Close with one dated follow-up.",
-        ],
-        "landmines": ["Do not assume procurement is aligned.", "Avoid vague implementation language."],
-        "lastInteraction": context[:180],
-        "powerNote": "HydraDB recall is empty or unavailable; this brief is a conservative default.",
-    }
+

@@ -46,18 +46,3 @@
   display: grid;
   gap: 8px;
 }
-
-.wizard-skip {
-  background: transparent;
-  border: none;
-  color: var(--n-dim);
-  font-size: 9px;
-  cursor: pointer;
-  text-align: center;
-  padding: 4px;
-  transition: color 0.15s;
-}
-
-.wizard-skip:hover {
-  color: var(--n-muted);
-}

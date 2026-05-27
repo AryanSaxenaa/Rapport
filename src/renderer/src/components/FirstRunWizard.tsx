@@ -136,9 +136,7 @@ export function FirstRunWizard({ depStatus, onComplete }: { depStatus: SidecarSt
             {saving ? <Loader2 size={13} className="spin" /> : <Key size={13} />}
             {saving ? 'Saving…' : 'Save and continue'}
           </button>
-          <button className="wizard-skip" onClick={onComplete}>
-            Skip for now (demo mode)
-          </button>
+
         </div>
       </motion.div>
     </div>

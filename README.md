@@ -20,7 +20,6 @@ Relationship context is usually scattered across inboxes, meeting notes, and mem
 - Ingests email context and writes extracted relationship signals into HydraDB.
 - Starts live capture for calls and stores important conversation signals.
 - Generates pre-call briefs with talking points, concerns, landmines, and next steps.
-- Falls back to local/demo contacts when HydraDB is not configured, so the app remains runnable.
 
 ## Why HydraDB
 
@@ -117,21 +116,6 @@ Optional renderer smoke test, once the Vite renderer is running:
 node scripts/smoke-renderer.mjs
 ```
 
-## Demo Flow
-
-For a hackathon demo:
-
-1. Start the app with `npm run dev`.
-2. Show the status pill and `Source: hydradb`.
-3. Click through real contact chips.
-4. Show the selected contact card and stance.
-5. Show the relationship graph.
-6. Click `Ingest` to demonstrate the memory write path.
-7. Click `Start`, then `End`, to show live capture.
-8. Click `Memory`, type `brief`, and run the pre-call brief workflow.
-
-See [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the full voiceover script.
-
 ## Project Structure
 
 ```text
@@ -145,7 +129,6 @@ scripts/               Renderer smoke test
 
 ## Documentation
 
-- [Demo Script](docs/DEMO_SCRIPT.md)
 - [Product Pitch](docs/PITCH.md)
 - [HydraDB Integration](docs/HYDRADB_INTEGRATION.md)
 - [Architecture](docs/ARCHITECTURE.md)

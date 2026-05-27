@@ -1,5 +1,4 @@
 import json
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -53,24 +52,3 @@ def save_local_contact(contact: dict[str, Any]) -> None:
         encoding="utf-8",
     )
 
-
-def demo_contacts() -> list[ContactDict]:
-    today = date.today().isoformat()
-    return [
-        ContactDict(
-            contactEmail="mira.voss@northstar-ledger.example",
-            contactName="Mira Voss",
-            company="Northstar Ledger",
-            stance="skeptic",
-            lastInteraction=today,
-            topics=["security review", "rollout workload", "budget timing"],
-        ),
-        ContactDict(
-            contactEmail="jon.bell@apexfoundry.example",
-            contactName="Jon Bell",
-            company="Apex Foundry",
-            stance="champion",
-            lastInteraction=today,
-            topics=["pilot scope", "executive sponsor"],
-        ),
-    ]

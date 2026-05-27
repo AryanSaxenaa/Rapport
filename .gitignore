@@ -16,7 +16,4 @@ python-sidecar/credentials.json
 **/credentials.json
 *.token.json
 
-# Build playbook & demo script (internal docs, not for public repo)
-Playbook.md
-docs/DEMO_SCRIPT.md
 

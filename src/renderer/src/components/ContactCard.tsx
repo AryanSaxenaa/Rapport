@@ -38,9 +38,10 @@ export function ContactCard({ contact }: { contact: Contact }) {
     <motion.section
       className="contact-card"
       key={contact.contactEmail}
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      layout
+      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.4, type: 'spring', bounce: 0.2 }}
     >
       <div className="avatar-mark">{initials}</div>
       <div className="contact-card-body">
@@ -104,7 +105,13 @@ export function ContactCard({ contact }: { contact: Contact }) {
         )}
 
         {briefVisible ? (
-          <div className="brief-panel">
+          <motion.div
+            className="brief-panel"
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+          >
             {brief.stanceShiftNote && (
               <p className="brief-shift-note">{brief.stanceShiftNote}</p>
             )}
@@ -131,16 +138,19 @@ export function ContactCard({ contact }: { contact: Contact }) {
             {brief.powerNote && (
               <p className="brief-power-note">{brief.powerNote}</p>
             )}
-          </div>
+          </motion.div>
         ) : (
-          <button
+          <motion.button
+            layout
             className="brief-trigger"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => void loadBrief()}
             disabled={loading || !contact.contactEmail}
           >
             <Zap size={11} />
             {loading ? 'Generating…' : 'Pre-call brief'}
-          </button>
+          </motion.button>
         )}
       </div>
       <span className={`stance-badge ${contact.stance}`}>{contact.stance}</span>

@@ -4,7 +4,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   main: {
     build: {
-      outDir: 'out/main'
+      outDir: 'out/main',
+      rollupOptions: {
+        external: ['electron-updater']
+      }
     }
   },
   preload: {

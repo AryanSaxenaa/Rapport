@@ -166,13 +166,15 @@ export function App() {
             <span className="micro-label">Contacts</span>
             <div className="contact-chips">
               {contacts.map((c: Contact) => (
-                <button
+                <motion.button
                   key={c.contactEmail}
                   className={`contact-chip ${selectedContact.contactEmail === c.contactEmail ? 'active' : ''}`}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => setSelectedContact(c)}
                 >
                   {c.contactName}
-                </button>
+                </motion.button>
               ))}
             </div>
           </div>
@@ -192,7 +194,12 @@ export function App() {
               </div>
             </section>
           )}
-          <section className="signal-panel">
+          <motion.section
+            className="signal-panel"
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.4, delay: 0.1, type: 'spring', bounce: 0.2 }}
+          >
             <div className="panel-heading">
               <Radio size={15} />
               <span>Live capture</span>
@@ -226,10 +233,16 @@ export function App() {
                 End
               </motion.button>
             </div>
-          </section>
+          </motion.section>
         </div>
 
-        <RelationshipGraph nodes={graphData.nodes} edges={graphData.edges} />
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2, type: 'spring', bounce: 0.2 }}
+        >
+          <RelationshipGraph nodes={graphData.nodes} edges={graphData.edges} />
+        </motion.div>
 
         {fileIngestStatus && (
           <div className={`data-banner${fileIngestStatus.includes('failed') || fileIngestStatus.includes('supported') ? ' warn' : ''}`}>
@@ -309,12 +322,22 @@ export function App() {
         {commandOpen && (
           <motion.div
             className="command-layer"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 28 }}
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={0.4}
+            onDragEnd={(_e, { offset, velocity }) => {
+              if (offset.y > 100 || velocity.y > 500) {
+                setCommandOpen(false)
+              }
+            }}
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
           >
-            <CommandBar onClose={() => setCommandOpen(false)} />
+            <div className="glass-panel" style={{ borderRadius: 8 }}>
+              <CommandBar onClose={() => setCommandOpen(false)} />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -323,12 +346,22 @@ export function App() {
         {settingsOpen && (
           <motion.div
             className="command-layer"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 28 }}
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={0.4}
+            onDragEnd={(_e, { offset, velocity }) => {
+              if (offset.y > 100 || velocity.y > 500) {
+                setSettingsOpen(false)
+              }
+            }}
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
           >
-            <SettingsPanel onClose={() => setSettingsOpen(false)} />
+            <div className="glass-panel" style={{ borderRadius: 8 }}>
+              <SettingsPanel onClose={() => setSettingsOpen(false)} />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

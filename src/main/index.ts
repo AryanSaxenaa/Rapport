@@ -161,6 +161,7 @@ app.whenReady().then(async () => {
   // Auto-update: only runs in production with electron-updater installed
   if (!isDev) {
     try {
+      // @ts-ignore - electron-updater is an optional dependency injected during official builds
       const { autoUpdater } = await import('electron-updater')
       autoUpdater.checkForUpdatesAndNotify().catch(() => {/* no network or no release */})
     } catch {

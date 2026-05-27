@@ -10,11 +10,11 @@
   --n-muted: #8d8981;
   --n-dim: #5f5b55;
   --n-accent: #df5f3b;
-  --n-accent-glow: rgba(223, 95, 59, 0.15);
+  --n-accent-glow: rgba(223, 95, 59, 0.25);
   --n-green: #54c878;
-  --n-green-glow: rgba(84, 200, 120, 0.15);
+  --n-green-glow: rgba(84, 200, 120, 0.25);
   --n-red: #d75b5b;
-  --n-red-glow: rgba(215, 91, 91, 0.15);
+  --n-red-glow: rgba(215, 91, 91, 0.25);
   --font-header: 'Syne', 'Courier New', monospace;
   --font-body: 'JetBrains Mono', 'Courier New', monospace;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -23,6 +23,13 @@
 
 * {
   box-sizing: border-box;
+}
+
+.glass-panel {
+  background: rgba(13, 13, 13, 0.7) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(39, 39, 39, 0.6) !important;
 }
 
 html,
@@ -921,6 +928,7 @@ button:active {
   padding: 12px;
   border: 1px solid var(--n-border);
   background: var(--n-surface);
+  border-radius: 8px; /* Slightly softer corners for overlays */
 }
 
 .command-input-wrap {
@@ -1080,6 +1088,7 @@ button:active {
   background: var(--n-surface);
   max-height: 72vh;
   overflow-y: auto;
+  border-radius: 8px; /* Slightly softer corners for overlays */
 }
 
 .settings-header {

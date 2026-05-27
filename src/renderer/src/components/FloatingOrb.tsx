@@ -46,10 +46,14 @@ export function FloatingOrb() {
           <motion.button
             key="orb"
             className="ambient-orb"
-            initial={{ scale: 0.84, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.84, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 24 }}
+            drag
+            dragConstraints={{ left: -300, right: 0, top: -600, bottom: 0 }}
+            dragElastic={0.1}
+            dragMomentum={false}
+            initial={{ scale: 0.5, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
             onClick={toggleMinimized}
             title={minimized ? 'Expand Rapport' : 'Minimize Rapport'}
           >
@@ -62,9 +66,14 @@ export function FloatingOrb() {
           <motion.button
             key="loading"
             className="ambient-orb loading"
-            initial={{ scale: 0.84, opacity: 0 }}
+            drag
+            dragConstraints={{ left: -300, right: 0, top: -600, bottom: 0 }}
+            dragElastic={0.1}
+            dragMomentum={false}
+            initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.84, opacity: 0 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
           >
             <Loader2 size={20} className="spin" />
             <i className="loading-ring" />
@@ -75,10 +84,14 @@ export function FloatingOrb() {
           <motion.button
             key="live"
             className="live-strip"
-            initial={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.94 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 24 }}
+            drag
+            dragConstraints={{ left: -200, right: 0, top: -600, bottom: 0 }}
+            dragElastic={0.1}
+            dragMomentum={false}
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 24 }}
             onClick={toggleMinimized}
           >
             <div className="live-head">

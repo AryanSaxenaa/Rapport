@@ -1,11 +1,7 @@
 import json
-import os
 from typing import Any
 
-import httpx
-
-from hydradb_client import parse_model_list
-
+from openrouter_client import chat, extract_content, parse_model_list
 
 EXTRACTION_SYSTEM = """Return ONLY valid JSON with keys:
 people, companies, topics, commitments, relations, unresolved, stance, sentiment_shift, summary.
@@ -43,38 +39,22 @@ async def extract_entities(text: str) -> dict[str, Any]:
     if not text.strip():
         return dict(_EMPTY_EXTRACTION)
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        return dict(_EMPTY_EXTRACTION)
-
-    async with httpx.AsyncClient(timeout=45.0) as client:
-        response = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": "https://rapport.local",
-                "X-Title": "Rapport",
-            },
-            json={
-                "models": _EXTRACTION_MODELS,
-                "temperature": 0.1,
-                "max_tokens": 1200,
-                "messages": [
-                    {"role": "system", "content": EXTRACTION_SYSTEM},
-                    {"role": "user", "content": text},
-                ],
-            },
+    try:
+        response = await chat(
+            messages=[
+                {"role": "system", "content": EXTRACTION_SYSTEM},
+                {"role": "user", "content": text},
+            ],
+            models=_EXTRACTION_MODELS,
+            temperature=0.1,
+            max_tokens=1200,
         )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            return dict(_EMPTY_EXTRACTION)
+        return json.loads(extract_content(response))
+    except Exception:
+        return dict(_EMPTY_EXTRACTION)
 
 
 def has_meaningful_extraction(extracted: dict[str, Any]) -> bool:
-    """Return True only if extraction produced real signal worth storing."""
     return bool(
         extracted.get("topics")
         or extracted.get("relations")

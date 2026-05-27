@@ -7,25 +7,13 @@ stored metadata — never decoded from the sub-tenant ID string (lossy).
 import asyncio
 from typing import Any
 
+from contact_persistence import normalize_contact, load_local_contacts, demo_contacts
 from hydradb_client import (
     TENANT_ID,
     _hydradb_client,
-    _normalize_contact,
     _to_plain_data,
     _with_retry,
-    load_local_contacts,
-    demo_contacts,
 )
-
-
-def normalize_contact(meta: dict[str, Any], fallback_email: str = "") -> dict[str, Any]:
-    """Canonical contact shape from any metadata dict. Delegates to hydradb_client."""
-    extracted = meta.get("extracted")
-    extracted = extracted if isinstance(extracted, dict) else {}
-    flat: dict[str, Any] = {**extracted, **meta}
-    if fallback_email and not (flat.get("contactEmail") or flat.get("contact_email")):
-        flat["contact_email"] = fallback_email
-    return _normalize_contact(flat)
 
 
 def _add_contact(contacts: list[dict[str, Any]], seen: set[str], contact: dict[str, Any]) -> None:
@@ -63,7 +51,6 @@ async def _iter_from_sub_tenants(client) -> list[dict[str, Any]]:
             )
             plain = _to_plain_data(data)
             sources = plain.get("sources") or []
-            # Build contact from stored metadata; never decode sid as email
             meta: dict[str, Any] = {}
             for src in sources:
                 m = src.get("additional_metadata") or src.get("metadata") or {}
@@ -72,12 +59,19 @@ async def _iter_from_sub_tenants(client) -> list[dict[str, Any]]:
                     break
             if not meta:
                 return None
-            return normalize_contact(meta)
+            return _normalize_contact_src(meta)
         except Exception:
             return None
 
     results = await asyncio.gather(*(recall_one(sid) for sid in contact_ids), return_exceptions=True)
     return [r for r in results if isinstance(r, dict)]
+
+
+def _normalize_contact_src(meta: dict[str, Any]) -> dict[str, Any]:
+    extracted = meta.get("extracted")
+    extracted = extracted if isinstance(extracted, dict) else {}
+    flat: dict[str, Any] = {**extracted, **meta}
+    return normalize_contact(flat)
 
 
 async def _iter_from_full_recall(client) -> list[dict[str, Any]]:
@@ -105,7 +99,7 @@ async def _iter_from_full_recall(client) -> list[dict[str, Any]]:
                 if not meta and isinstance(chunk.get("metadata"), dict):
                     meta = chunk["metadata"]
                 if meta.get("contact_email"):
-                    contacts.append(normalize_contact(meta))
+                    contacts.append(_normalize_contact_src(meta))
         except Exception:
             pass
     return contacts

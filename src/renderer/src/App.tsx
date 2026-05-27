@@ -63,17 +63,13 @@ export function App() {
     depStatus !== null &&
     (!depStatus.hydradb.ok || !depStatus.openrouter.ok)
 
-  async function handleFileDrop(event: React.DragEvent<HTMLElement>) {
-    event.preventDefault()
-    setDragOver(false)
-    const files = Array.from(event.dataTransfer.files).filter(
+  async function ingestFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList).filter(
       (f) => f.name.endsWith('.eml') || f.name.endsWith('.mbox')
     )
     if (files.length === 0) {
-      setFileIngestStatus('Only .eml and .mbox files are supported.')
-      return
+      return 0
     }
-    setFileIngestStatus(`Ingesting ${files.length} file${files.length > 1 ? 's' : ''}…`)
     let total = 0
     for (const file of files) {
       const form = new FormData()
@@ -83,14 +79,29 @@ export function App() {
         const data = await res.json() as { count?: number }
         total += data.count ?? 0
       } catch {
-        setFileIngestStatus('Ingest failed — is the sidecar running?')
-        return
+        throw new Error('Ingest failed — is the sidecar running?')
       }
     }
-    setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
-    setTimeout(() => setFileIngestStatus(null), 4000)
-    void fetchContacts()
-    void fetchGraph()
+    return total
+  }
+
+  async function handleFileDrop(event: React.DragEvent<HTMLElement>) {
+    event.preventDefault()
+    setDragOver(false)
+    if (Array.from(event.dataTransfer.files).filter((f) => f.name.endsWith('.eml') || f.name.endsWith('.mbox')).length === 0) {
+      setFileIngestStatus('Only .eml and .mbox files are supported.')
+      return
+    }
+    try {
+      setFileIngestStatus(`Ingesting files…`)
+      const total = await ingestFiles(event.dataTransfer.files)
+      setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
+      setTimeout(() => setFileIngestStatus(null), 4000)
+      void fetchContacts()
+      void fetchGraph()
+    } catch (err) {
+      setFileIngestStatus(err instanceof Error ? err.message : 'Ingest failed.')
+    }
   }
 
   return (
@@ -226,26 +237,17 @@ export function App() {
               input.accept = '.eml,.mbox'
               input.multiple = true
               input.onchange = async () => {
-                const files = Array.from(input.files ?? [])
-                if (!files.length) return
-                setFileIngestStatus(`Ingesting ${files.length} file${files.length > 1 ? 's' : ''}…`)
-                let total = 0
-                for (const file of files) {
-                  const form = new FormData()
-                  form.append('file', file)
-                  try {
-                    const res = await fetch('http://127.0.0.1:8765/ingest/file', { method: 'POST', body: form })
-                    const data = await res.json() as { count?: number }
-                    total += data.count ?? 0
-                  } catch {
-                    setFileIngestStatus('Ingest failed — is the sidecar running?')
-                    return
-                  }
+                if (!input.files?.length) return
+                try {
+                  setFileIngestStatus('Ingesting files…')
+                  const total = await ingestFiles(input.files)
+                  setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
+                  setTimeout(() => setFileIngestStatus(null), 4000)
+                  void fetchContacts()
+                  void fetchGraph()
+                } catch (err) {
+                  setFileIngestStatus(err instanceof Error ? err.message : 'Ingest failed.')
                 }
-                setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
-                setTimeout(() => setFileIngestStatus(null), 4000)
-                void fetchContacts()
-                void fetchGraph()
               }
               input.click()
             }}

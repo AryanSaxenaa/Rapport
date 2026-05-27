@@ -27,8 +27,7 @@ async def poll_for_upcoming_meetings(
     service = _get_calendar_service()
     if not service:
         print("Calendar: credentials.json not found — skipping calendar polling.")
-        while True:
-            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        return
 
     seen_event_ids: set[str] = set()
 

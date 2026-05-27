@@ -147,12 +147,13 @@ Implemented:
 - parallel recall path
 - retry handling
 - fallback behavior when env vars are missing
+- graph relation fetch for the D3 visualization
+- knowledge upload for transcripts and email threads
+- email ingestion pipeline (Gmail, IMAP, .eml/.mbox)
 
 Planned:
 
-- knowledge upload for full transcripts and Gmail threads
 - processing verification for uploaded sources
-- graph relation fetch for the D3 visualization
 - tenant provisioning helper
 - richer metadata filters by date, interaction type, and deal stage
 

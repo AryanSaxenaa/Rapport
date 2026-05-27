@@ -79,8 +79,8 @@ Responsibilities:
 - transcript processing
 - LLM extraction
 - HydraDB writes and recall
-- Gmail ingestion extension point
-- Calendar polling extension point
+- Gmail ingestion
+- Calendar polling
 - WebSocket push to the overlay
 
 ## Data Flow

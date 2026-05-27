@@ -23,17 +23,18 @@ def parse_model_list(env_var: str, default: str) -> list[str]:
 
 
 async def _with_retry(operation: Callable[[], Awaitable[T]], max_retries: int = 3, base_delay: float = 2.0) -> T:
+    """Retry with exponential backoff: 1 s, 2 s, 4 s."""
     for attempt in range(1, max_retries + 1):
         try:
             return await operation()
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code not in RETRYABLE_STATUS_CODES or attempt == max_retries:
                 raise
-            await asyncio.sleep(base_delay ** attempt)
+            await asyncio.sleep(base_delay ** (attempt - 1))
         except (httpx.ConnectError, httpx.TimeoutException):
             if attempt == max_retries:
                 raise
-            await asyncio.sleep(base_delay ** attempt)
+            await asyncio.sleep(base_delay ** (attempt - 1))
     raise RuntimeError("OpenRouter retry loop exhausted")
 
 

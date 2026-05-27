@@ -34,12 +34,12 @@ def _list_input_devices() -> list[DeviceInfo]:
     devices = sd.query_devices()
     return [
         {
-            "index": d["index"],
+            "index": i,  # use list position; the 'index' key is absent in some sd versions
             "name": d["name"],
             "channels": d["max_input_channels"],
             "default_samplerate": d["default_samplerate"],
         }
-        for d in devices
+        for i, d in enumerate(devices)
         if d["max_input_channels"] > 0
     ]
 
@@ -130,9 +130,18 @@ class AudioCapture:
                     wav_bytes = _numpy_to_wav_bytes(audio, samplerate)
                     self._buffer = []
                     self._sample_count = 0
-                    asyncio.create_task(self._transcribe_and_push(wav_bytes))
+                    task = asyncio.create_task(self._transcribe_and_push(wav_bytes))
+                    task.add_done_callback(self._on_transcribe_done)
 
     async def _transcribe_and_push(self, wav_bytes: bytes) -> None:
         text = await transcribe_audio_chunk(wav_bytes)
         if text:
             await self.on_text(text)
+
+    def _on_transcribe_done(self, task: asyncio.Task) -> None:
+        """Log transcription errors; never raises so the capture loop keeps running."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc:
+            print(f"AudioCapture: transcription error — {exc}")

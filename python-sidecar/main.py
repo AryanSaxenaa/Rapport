@@ -1,9 +1,10 @@
 import asyncio
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from dotenv import dotenv_values, load_dotenv
+from dotenv import dotenv_values, load_dotenv, set_key
 
 load_dotenv(override=True)
 
@@ -30,13 +31,41 @@ _session = RecordingSession()
 
 
 # ---------------------------------------------------------------------------
+# Lifespan (replaces deprecated @app.on_event("startup"))
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):  # noqa: ARG001
+    async def on_upcoming_meeting(meeting_info: MeetingInfo) -> None:
+        brief = await generate_pre_call_brief(
+            contact_email=meeting_info.get("contact_email", ""),
+            contact_name=meeting_info.get("contact_name", ""),
+            company=meeting_info.get("company", ""),
+        )
+        await _clients.broadcast({"type": "brief", "data": {**brief, "trigger": "calendar"}})
+
+    asyncio.create_task(poll_for_upcoming_meetings(on_upcoming_meeting))
+    yield
+
+
+# ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Rapport Sidecar", version="0.1.0")
+# BUG-34: Restrict CORS to known local origins instead of wildcard "*".
+# The Electron renderer loads from either the Vite dev server or the
+# file:// / app:// scheme.  Allowing only these prevents any website the user
+# visits from making cross-origin requests to the local sidecar.
+_ALLOWED_ORIGINS = [
+    "http://localhost:5173",   # Vite dev server
+    "http://127.0.0.1:5173",
+    "app://localhost",         # Electron production (file protocol alias)
+]
+
+app = FastAPI(title="Rapport Sidecar", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,19 +93,24 @@ async def get_status():
 
 @app.post("/configure")
 async def configure(body: dict[str, Any]):
+    """Persist API keys to the sidecar's .env file.
+
+    BUG-6 fix: use python-dotenv's ``set_key`` helper which correctly quotes
+    values that contain ``=``, ``#``, spaces, or other special characters,
+    preventing .env corruption.
+    """
     env_path = Path(__file__).parent / ".env"
     allowed_keys = {"HYDRA_DB_API_KEY", "HYDRA_DB_TENANT_ID", "OPENROUTER_API_KEY"}
     updates = {k: v for k, v in body.items() if k in allowed_keys and v}
     if not updates:
         return {"status": "no_changes"}
 
-    existing: dict[str, str | None] = dotenv_values(env_path) if env_path.exists() else {}
-    existing.update(updates)
-    entries = {k: v for k, v in existing.items() if v is not None}
-    env_path.write_text(
-        "\n".join(f"{k}={v}" for k, v in entries.items()) + "\n",
-        encoding="utf-8",
-    )
+    # Ensure the file exists so set_key can append to it.
+    env_path.touch(exist_ok=True)
+
+    for key, value in updates.items():
+        set_key(str(env_path), key, value, quote_mode="always")
+
     load_dotenv(env_path, override=True)
     return {"status": "saved", "keys": list(updates.keys())}
 
@@ -121,20 +155,3 @@ def _check_mic() -> tuple[bool, str | None]:
         return False, "sounddevice not installed — run: pip install sounddevice"
     except Exception as exc:
         return False, str(exc)
-
-
-# ---------------------------------------------------------------------------
-# Startup
-# ---------------------------------------------------------------------------
-
-@app.on_event("startup")
-async def startup():
-    async def on_upcoming_meeting(meeting_info: MeetingInfo):
-        brief = await generate_pre_call_brief(
-            contact_email=meeting_info.get("contact_email", ""),
-            contact_name=meeting_info.get("contact_name", ""),
-            company=meeting_info.get("company", ""),
-        )
-        await _clients.broadcast({"type": "brief", "data": {**brief, "trigger": "calendar"}})
-
-    asyncio.create_task(poll_for_upcoming_meetings(on_upcoming_meeting))

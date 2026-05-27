@@ -29,6 +29,11 @@ def _hydradb_client() -> AsyncHydraDB | None:
 
 
 async def _with_retry(operation: Callable[[], Awaitable[T]], max_retries: int = 3) -> T:
+    """Retry ``operation`` on transient failures (rate-limits, server errors,
+    or transient network errors).  Raises on the last attempt regardless of
+    error type.
+    """
+    last_exc: Exception | None = None
     for attempt in range(1, max_retries + 1):
         try:
             return await operation()
@@ -36,8 +41,14 @@ async def _with_retry(operation: Callable[[], Awaitable[T]], max_retries: int = 
             status_code = getattr(exc, "status_code", None)
             if status_code not in RETRYABLE_STATUS_CODES or attempt == max_retries:
                 raise
-            await asyncio.sleep(2 ** attempt)
-    raise RuntimeError("HydraDB retry loop exhausted")
+            last_exc = exc
+        except Exception as exc:  # network errors, SDK changes, etc.
+            if attempt == max_retries:
+                raise
+            last_exc = exc
+        await asyncio.sleep(2 ** (attempt - 1))  # 1 s, 2 s, 4 s
+    # Unreachable in normal flow, but satisfies the type-checker.
+    raise last_exc or RuntimeError("HydraDB retry loop exhausted")
 
 
 def _error_payload(exc: Exception) -> ErrorPayload:

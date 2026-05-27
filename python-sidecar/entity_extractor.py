@@ -1,8 +1,18 @@
 import json
+import re
 from typing import cast
 
 from openrouter_client import chat, extract_content, parse_model_list
 from sidecar_types import ExtractionResult
+
+# Shared fence-stripping pattern (same as brief_generator.py).
+_FENCE_RE = re.compile(r"^```[a-z]*\n?", re.MULTILINE)
+
+
+def _strip_json_fences(text: str) -> str:
+    """Remove markdown code fences that LLMs commonly wrap JSON responses in."""
+    text = _FENCE_RE.sub("", text.strip())
+    return text.rstrip("`").strip()
 
 EXTRACTION_SYSTEM = """Return ONLY valid JSON with keys:
 people, companies, topics, commitments, relations, unresolved, stance, sentiment_shift, summary.
@@ -51,7 +61,7 @@ async def extract_entities(text: str) -> ExtractionResult:
             max_tokens=1200,
         )
         content = extract_content(response)
-        return cast(ExtractionResult, json.loads(content))
+        return cast(ExtractionResult, json.loads(_strip_json_fences(content)))
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         print(f"Entity extraction: LLM returned malformed response — {exc}")
         return {**_EMPTY_EXTRACTION}

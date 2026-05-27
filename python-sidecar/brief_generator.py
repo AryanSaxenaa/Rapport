@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from typing import Any
 
 from hydradb_client import (
@@ -15,6 +16,9 @@ from openrouter_client import chat, extract_content, parse_model_list
 from sidecar_types import OpenRouterResponse
 
 _BRIEF_MODELS = parse_model_list("BRIEF_MODEL", "openrouter/owl-alpha,poolside/laguna-m.1:free")
+
+# Matches leading ```json / ``` fences that LLMs add around JSON responses.
+_FENCE_RE = re.compile(r"^```[a-z]*\n?", re.MULTILINE)
 
 
 async def generate_pre_call_brief(contact_email: str, contact_name: str, company: str) -> dict[str, Any]:
@@ -34,9 +38,15 @@ async def generate_pre_call_brief(contact_email: str, contact_name: str, company
             temperature=0.2,
             max_tokens=1500,
         )
-        return json.loads(extract_content(response))
+        return json.loads(_strip_json_fences(extract_content(response)))
     except Exception:
         return _fallback_brief(contact_name, company, context)
+
+
+def _strip_json_fences(text: str) -> str:
+    """Remove markdown code fences that LLMs commonly wrap JSON responses in."""
+    text = _FENCE_RE.sub("", text.strip())
+    return text.rstrip("`").strip()
 
 
 async def _recall_contact_context(contact_email: str, contact_name: str, company: str) -> str:

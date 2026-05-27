@@ -31,8 +31,8 @@ export function PreCallBrief({ brief, onDismiss }: { brief: Brief; onDismiss: ()
             <AlertTriangle size={14} />
             Concerns
           </h3>
-          {brief.topConcerns.map((concern) => (
-            <p className="brief-line" key={concern}>{concern}</p>
+          {brief.topConcerns.map((concern, i) => (
+            <p className="brief-line" key={i}>{concern}</p>
           ))}
         </section>
 
@@ -41,8 +41,8 @@ export function PreCallBrief({ brief, onDismiss }: { brief: Brief; onDismiss: ()
             <CheckCircle2 size={14} />
             Talking points
           </h3>
-          {brief.talkingPoints.map((point) => (
-            <p className="brief-line" key={point}>{point}</p>
+          {brief.talkingPoints.map((point, i) => (
+            <p className="brief-line" key={i}>{point}</p>
           ))}
         </section>
 

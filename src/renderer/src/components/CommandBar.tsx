@@ -6,7 +6,7 @@ export function CommandBar({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { selectedContact, setActiveBrief, fetchBrief } = useRapportStore()
+  const { selectedContact, fetchBrief } = useRapportStore()
 
   async function runCommand() {
     setLoading(true)

@@ -7,7 +7,7 @@ from email import policy as email_policy
 from email.message import Message as _EmailMessage
 from typing import Any
 
-from html_utils import strip_html
+from html_utils import derive_company, strip_html
 
 
 class ImapAuthError(Exception):
@@ -84,7 +84,7 @@ def _parse_message(msg: _EmailMessage) -> dict[str, Any] | None:
         "contact": {
             "email": addr.lower(),
             "name": name or addr.split("@")[0].replace(".", " ").title(),
-            "company": _guess_company(addr),
+            "company": derive_company(addr),
         },
     }
 
@@ -127,12 +127,3 @@ def _extract_body(msg: Any) -> str:
         return strip_html(html_body)
     return ""
 
-
-def _guess_company(addr: str) -> str:
-    if "@" not in addr:
-        return ""
-    domain = addr.split("@")[-1].lower()
-    public = {"gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com", "me.com"}
-    if domain in public:
-        return ""
-    return domain.split(".")[0].replace("-", " ").title()

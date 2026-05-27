@@ -27,16 +27,24 @@ async def store_relations(
     contact_email: str | None,
     interaction_date: str | None = None,
 ) -> None:
-    """Store each extracted relation as a typed memory in the _relations sub-tenant."""
-    if not relations:
+    """Store each extracted relation as a typed memory in the _relations sub-tenant.
+
+    The LLM extraction prompt produces keys ``from`` / ``to`` / ``type`` /
+    ``evidence`` / ``confidence``.  We also accept the TypedDict aliases
+    ``from_person`` / ``to_person`` so either schema works.
+    """
+    if not relations or not client:
         return
+
     today = interaction_date or date.today().isoformat()
     memories = []
     for rel in relations:
-        from_p = (rel.get("from") or "").strip()
-        to_p = (rel.get("to") or "").strip()
-        rel_type = (rel.get("type") or "").strip()
-        evidence = (rel.get("evidence") or "").strip()
+        # Accept both the prompt-style keys ('from'/'to') and the TypedDict
+        # aliases ('from_person'/'to_person') — whichever the LLM returns.
+        from_p = (rel.get("from") or rel.get("from_person") or "").strip()
+        to_p   = (rel.get("to")   or rel.get("to_person")   or "").strip()
+        rel_type  = (rel.get("type") or "").strip()
+        evidence  = (rel.get("evidence") or "").strip()
         confidence = float(rel.get("confidence") or 0.7)
 
         if not (from_p and to_p and rel_type in VALID_TYPES and evidence):
@@ -57,9 +65,6 @@ async def store_relations(
         })
 
     if not memories:
-        return
-
-    if not client:
         return
 
     await _with_retry(

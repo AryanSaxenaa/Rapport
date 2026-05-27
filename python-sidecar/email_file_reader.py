@@ -85,18 +85,25 @@ def parse_eml(data: bytes) -> dict[str, Any] | None:
 
 
 def parse_mbox(data: bytes) -> list[dict[str, Any]]:
-    """Parse an .mbox file. Returns list of canonical Email dicts."""
+    """Parse an .mbox file. Returns list of canonical Email dicts.
+
+    Each message in mbox format is preceded by a ``From `` separator line.
+    BUG-14 fix: that separator line must be *discarded*, not prepended to the
+    next message body.  The previous code used ``current = [line]`` which
+    included the ``From `` line in every message.
+    """
     results: list[dict[str, Any]] = []
     raw_text = data.decode("utf-8", errors="replace")
     current: list[str] = []
 
     for line in raw_text.splitlines(keepends=True):
-        if line.startswith("From ") and current:
-            msg = email.message_from_string("".join(current), policy=email.policy.compat32)
-            parsed = _parse_message(msg)
-            if parsed:
-                results.append(parsed)
-            current = [line]
+        if line.startswith("From "):
+            if current:
+                msg = email.message_from_string("".join(current), policy=email.policy.compat32)
+                parsed = _parse_message(msg)
+                if parsed:
+                    results.append(parsed)
+            current = []  # discard the separator line itself
         else:
             current.append(line)
 

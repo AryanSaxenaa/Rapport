@@ -8,6 +8,8 @@ type Handlers = {
   onError: (message: string) => void
   onStatusChange: (status: 'online' | 'offline') => void
   onConnect: () => void
+  /** Called when the sidecar completes an ingest batch. */
+  onIngestComplete: () => void
 }
 
 export function useSidecarSocket(handlers: Handlers) {
@@ -41,6 +43,9 @@ export function useSidecarSocket(handlers: Handlers) {
           if (payload.type === 'transcript') handlersRef.current.onTranscript(payload.text)
           if (payload.type === 'brief') handlersRef.current.onBrief(payload.data)
           if (payload.type === 'error') handlersRef.current.onError(payload.message)
+          // BUG-24: ingest_complete was previously unhandled — contacts and the
+          // graph were never refreshed automatically after a background ingest.
+          if (payload.type === 'ingest_complete') handlersRef.current.onIngestComplete()
         } catch (err) {
           console.warn('Rapport: malformed WS frame', err)
         }

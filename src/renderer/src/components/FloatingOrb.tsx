@@ -7,8 +7,16 @@ import { useRapportStore } from '../store/rapport-store'
 type OrbState = 'idle' | 'loading' | 'live' | 'brief'
 
 export function FloatingOrb() {
-  const { isRecording, activeBrief, briefLoading, liveTranscript, detectedContacts, setActiveBrief, minimized, setMinimized } =
-    useRapportStore()
+  const {
+    isRecording,
+    activeBrief,
+    briefLoading,
+    liveTranscript,
+    detectedContacts,
+    setActiveBrief,
+    minimized,
+    setMinimized,
+  } = useRapportStore()
   const [orbState, setOrbState] = useState<OrbState>('idle')
 
   useEffect(() => {
@@ -19,10 +27,11 @@ export function FloatingOrb() {
   }, [isRecording, activeBrief, briefLoading])
 
   async function toggleMinimized() {
-    const store = useRapportStore.getState()
-    const next = !store.minimized
-    store.setMinimized(next)
-    // Resize the Electron window so it doesn't block the screen
+    // BUG-30: Read minimized from the store snapshot at call-time so we
+    // always toggle the current value, not a stale closure.  `setMinimized`
+    // is already available from the hook above, so we don't need getState().
+    const next = !minimized
+    setMinimized(next)
     if (next) {
       await window.electron?.minimizeWindow?.()
     } else {

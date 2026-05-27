@@ -87,7 +87,14 @@ export function RelationshipGraph({ nodes, edges }: { nodes: GraphNode[]; edges:
       .style('cursor', 'pointer')
       .on('click', (event: MouseEvent, d) => {
         event.stopPropagation()
-        setEvidence({ edge: d.originalEdge, x: event.offsetX, y: event.offsetY })
+        // BUG-27: event.offsetX/Y is relative to the clicked child element
+        // (the <line>), not the SVG container — so the panel appeared at a
+        // seemingly random position.  Use clientX/Y minus the SVG bounding
+        // rect to get coordinates relative to the container div.
+        const svgRect = svgRef.current?.getBoundingClientRect()
+        const x = svgRect ? event.clientX - svgRect.left : event.offsetX
+        const y = svgRect ? event.clientY - svgRect.top  : event.offsetY
+        setEvidence({ edge: d.originalEdge, x, y })
       })
 
     const nodeG = svg.append('g')

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Building2, CalendarDays, MessageSquareText, Zap } from 'lucide-react'
+import { Building2, CalendarDays, FileText, MessageSquareText, Zap } from 'lucide-react'
 import type { Contact, Brief } from '../store/rapport-store'
 import { useRapportStore } from '../store/rapport-store'
 
@@ -16,6 +16,12 @@ export function ContactCard({ contact }: { contact: Contact }) {
     .join('')
     .toUpperCase()
     .slice(0, 2)
+
+  // BUG-23: Reset loading when the contact prop changes so the button never
+  // shows 'Generating…' for a contact that has no active fetch in flight.
+  useEffect(() => {
+    setLoading(false)
+  }, [contact.contactEmail])
 
   async function loadBrief() {
     if (!contact.contactEmail) return
@@ -63,7 +69,8 @@ export function ContactCard({ contact }: { contact: Contact }) {
         )}
         {contact.summary && (
           <p className="interaction-note">
-            <CalendarDays size={12} />
+            {/* BUG-28: FileText is semantically correct for a summary; CalendarDays was copy-pasted from the lastInteraction block above */}
+            <FileText size={12} />
             {contact.summary}
           </p>
         )}

@@ -39,23 +39,35 @@ export function App() {
   } = useRapportStore()
 
   const [wizardDismissed, setWizardDismissed] = useState(false)
-
   const [dragOver, setDragOver] = useState(false)
   const [fileIngestStatus, setFileIngestStatus] = useState<string | null>(null)
 
+  // BUG-22: Previously, fetchContacts/fetchGraph/fetchDepStatus were both called
+  // here in a useEffect AND again inside onConnect, causing a double-fetch on
+  // every WebSocket connection.  The single source of truth is onConnect: it
+  // fires once when the socket first connects (or reconnects), which is exactly
+  // when stale data needs refreshing.  The standalone useEffect is removed.
   useSidecarSocket({
     onStatusChange: setSidecarStatus,
     onConnect: () => { void fetchContacts(); void fetchGraph(); void fetchDepStatus() },
     onTranscript: pushTranscript,
     onBrief: (data) => setActiveBrief(data as Brief),
     onError: (msg) => pushTranscript(`Error: ${msg}`),
+    // BUG-24: Handle ingest_complete so contacts + graph refresh automatically
+    // after any background ingest batch (file, IMAP, or Gmail).
+    onIngestComplete: () => { void fetchContacts(); void fetchGraph() },
   })
 
+  // Fallback: if the WebSocket never connects (offline), still attempt to load
+  // contacts once on mount via HTTP so the UI isn't completely blank.
   useEffect(() => {
-    void fetchContacts()
-    void fetchGraph()
-    void fetchDepStatus()
-  }, [fetchContacts, fetchGraph, fetchDepStatus])
+    if (sidecarStatus !== 'online') {
+      void fetchContacts()
+      void fetchDepStatus()
+    }
+    // Run only once on mount — intentionally omitting sidecarStatus from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const showWizard =
     !wizardDismissed &&
@@ -67,15 +79,16 @@ export function App() {
     const files = Array.from(fileList).filter(
       (f) => f.name.endsWith('.eml') || f.name.endsWith('.mbox')
     )
-    if (files.length === 0) {
-      return 0
-    }
+    if (files.length === 0) return 0
     let total = 0
     for (const file of files) {
       const form = new FormData()
       form.append('file', file)
       try {
         const res = await fetch(`${SIDECAR_URL}/ingest/file`, { method: 'POST', body: form })
+        // BUG-25: Must check res.ok before calling res.json() — an error
+        // response may not be valid JSON, or may be a FastAPI HTML error page.
+        if (!res.ok) throw new Error(`Ingest failed: HTTP ${res.status}`)
         const data = await res.json() as { count?: number }
         total += data.count ?? 0
       } catch (err) {
@@ -88,13 +101,17 @@ export function App() {
   async function handleFileDrop(event: React.DragEvent<HTMLElement>) {
     event.preventDefault()
     setDragOver(false)
-    if (Array.from(event.dataTransfer.files).filter((f) => f.name.endsWith('.eml') || f.name.endsWith('.mbox')).length === 0) {
-      setFileIngestStatus('Only .eml and .mbox files are supported.')
-      return
-    }
+    // BUG-26: The old code performed the file-type check separately and then
+    // passed the raw FileList (with any invalid files still in it) to ingestFiles.
+    // ingestFiles already filters internally, so we just let it handle everything
+    // and only show the 'no valid files' message when the count comes back zero.
     try {
-      setFileIngestStatus(`Ingesting files…`)
+      setFileIngestStatus('Ingesting files…')
       const total = await ingestFiles(event.dataTransfer.files)
+      if (total === 0) {
+        setFileIngestStatus('Only .eml and .mbox files are supported.')
+        return
+      }
       setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
       setTimeout(() => setFileIngestStatus(null), 4000)
       void fetchContacts()
@@ -241,6 +258,10 @@ export function App() {
                 try {
                   setFileIngestStatus('Ingesting files…')
                   const total = await ingestFiles(input.files)
+                  if (total === 0) {
+                    setFileIngestStatus('No valid .eml or .mbox emails found in the selected files.')
+                    return
+                  }
                   setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
                   setTimeout(() => setFileIngestStatus(null), 4000)
                   void fetchContacts()

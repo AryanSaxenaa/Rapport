@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { CheckCircle, Database, Mic, RefreshCw, Server, Wifi, X } from 'lucide-react'
 import { useRapportStore } from '../store/rapport-store'
 import type { SidecarStatusDeps } from '../store/rapport-store'
 
-const DEP_ICONS: Record<string, React.ReactNode> = {
+const DEP_ICONS: Record<string, ReactNode> = {
   hydradb: <Database size={12} />,
   openrouter: <Server size={12} />,
   microphone: <Mic size={12} />,

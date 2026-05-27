@@ -37,7 +37,9 @@ async def poll_for_upcoming_meetings(
             now = datetime.now(timezone.utc)
             window_end = now + timedelta(minutes=UPCOMING_WINDOW_MINUTES)
 
-            events_result = (
+            # BUG-8: googleapiclient uses synchronous HTTP — run in a thread
+            # so we don't block the asyncio event loop during the poll.
+            events_result = await asyncio.to_thread(
                 service.events()
                 .list(
                     calendarId="primary",
@@ -46,7 +48,7 @@ async def poll_for_upcoming_meetings(
                     singleEvents=True,
                     orderBy="startTime",
                 )
-                .execute()
+                .execute
             )
 
             for event in events_result.get("items", []):

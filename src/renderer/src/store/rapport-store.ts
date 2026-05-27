@@ -193,7 +193,9 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   setActiveBrief: (brief) => set({ activeBrief: brief }),
   setMinimized: (value) => set({ minimized: value }),
   pushTranscript: (line) =>
-    set((state) => ({ liveTranscript: [...state.liveTranscript.slice(-7), line] })),
+    // BUG-32: Store keeps last 4 lines (UI shows last 2) — previously kept
+    // 8 lines that were never rendered, wasting memory.
+    set((state) => ({ liveTranscript: [...state.liveTranscript.slice(-3), line] })),
   setSelectedContact: (contact) => set({ selectedContact: contact }),
 
   fetchContacts: async () => {

@@ -73,12 +73,22 @@ async function startPythonSidecar() {
     if (isDev) console.warn(`[Python] ${data.toString()}`)
   })
 
-  pythonProcess.on('exit', () => {
+  pythonProcess.on('exit', (code) => {
     pythonProcess = null
+    // BUG-19: Restart the sidecar automatically after a non-zero exit so
+    // the UI doesn't stay permanently offline after a transient crash.
+    if (code !== 0 && code !== null) {
+      if (isDev) console.warn(`[Python] sidecar exited with code ${code} — restarting in 3 s`)
+      setTimeout(() => void startPythonSidecar(), 3000)
+    }
   })
 }
 
 function createWindow() {
+  // BUG-18: Reset the pre-minimize position whenever a new window is created
+  // so a stale value from a previous window can't mis-position this one.
+  windowBeforeMinimize = null
+
   mainWindow = new BrowserWindow({
     width: 460,
     height: 720,

@@ -45,7 +45,7 @@ def save_local_contact(contact: dict[str, Any]) -> None:
 
     contacts = load_local_contacts()
     by_email = {c.get("contactEmail", "").lower(): c for c in contacts}
-    existing = by_email.get(email.lower(), ContactDict())
+    existing: dict = by_email.get(email.lower(), {})
     by_email[email.lower()] = {**existing, **normalised}
 
     LOCAL_CONTACTS_PATH.write_text(

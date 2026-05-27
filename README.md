@@ -12,7 +12,7 @@ AI relationship memory that turns emails and calls into live context for better 
 
 ## What It Does
 
-Relationship context is usually scattered across inboxes, meeting notes, CRM fields, and memory. Rapport brings that context into a compact desktop companion:
+Relationship context is usually scattered across inboxes, meeting notes, and memory. Rapport brings that context into a compact desktop companion:
 
 - Loads real contacts from HydraDB memory.
 - Shows each contact's stance, company, email, topics, and last interaction.
@@ -20,7 +20,7 @@ Relationship context is usually scattered across inboxes, meeting notes, CRM fie
 - Ingests email context and writes extracted relationship signals into HydraDB.
 - Starts live capture for calls and stores important conversation signals.
 - Generates pre-call briefs with talking points, concerns, landmines, and next steps.
-- Falls back gracefully to local/demo contacts when HydraDB is not configured, so the app remains demoable.
+- Falls back to local/demo contacts when HydraDB is not configured, so the app remains runnable.
 
 ## Why HydraDB
 
@@ -40,14 +40,12 @@ The short version: **HydraDB remembers the relationship. Rapport helps you act o
 
 ```mermaid
 flowchart LR
-  UI["Electron + React Overlay"] <--> IPC["Electron IPC"]
-  UI --> DIRECT["Browser Dev Fallback"]
-  IPC <--> API["FastAPI Sidecar"]
-  DIRECT --> API
+  UI["Electron + React Overlay"] --> API["FastAPI Sidecar"]
   API --> HYDRA["HydraDB Memories + Recall"]
   API --> LLM["OpenRouter LLMs"]
   API --> GMAIL["Gmail API"]
   API --> CAL["Calendar API"]
+  API --> IMAP["IMAP"]
   HYDRA --> BRIEF["Pre-call Briefs"]
   HYDRA --> GRAPH["Relationship Graph"]
   BRIEF --> UI
@@ -65,7 +63,9 @@ flowchart LR
 - HydraDB
 - D3
 - OpenRouter
-- Gmail API extension points
+- Gmail API
+- Calendar API
+- IMAP
 
 ## Quick Start
 
@@ -81,7 +81,6 @@ Create `.env` from `.env.example` and set your keys:
 ```env
 HYDRA_DB_API_KEY=...
 HYDRA_DB_TENANT_ID=...
-HYDRADB_TENANT_ID=...
 OPENROUTER_API_KEY=...
 MY_EMAIL=you@example.com
 ```
@@ -115,7 +114,7 @@ npm run build
 Optional renderer smoke test, once the Vite renderer is running:
 
 ```powershell
-node scripts\smoke-renderer.mjs
+node scripts/smoke-renderer.mjs
 ```
 
 ## Demo Flow

@@ -20,6 +20,12 @@ Relationship context is usually scattered across inboxes, meeting notes, and mem
 - Ingests email context and writes extracted relationship signals into HydraDB.
 - Starts live capture for calls and stores important conversation signals.
 - Generates pre-call briefs with talking points, concerns, landmines, and next steps.
+- Syncs emails via Gmail OAuth, IMAP, or drag-and-drop .eml/.mbox import.
+- Polls Google Calendar for upcoming meetings and auto-generates briefs.
+- Encrypts stored IMAP credentials at rest using Fernet symmetric encryption.
+- Provides data retention controls to delete local contacts, credentials, and all data.
+- Surfaces LLM extraction and brief generation errors to the user in real time.
+- Rate-limits all API endpoints to prevent abuse.
 
 ## Why HydraDB
 
@@ -65,6 +71,8 @@ flowchart LR
 - Gmail API
 - Calendar API
 - IMAP
+- cryptography (Fernet encryption for IMAP credentials)
+- slowapi (API rate limiting)
 
 ## Quick Start
 
@@ -123,9 +131,35 @@ src/main/              Electron main process and sidecar orchestration
 src/preload/           Secure Electron IPC bridge
 src/renderer/          React UI and relationship graph
 python-sidecar/        FastAPI app, HydraDB integration, ingestion, recall
+python-sidecar/imap_secret_store.py   Encrypted IMAP credential storage
+resources/             Tray icon and app assets
 docs/                  Pitch, architecture, setup, and integration notes
 scripts/               Renderer smoke test
+PRIVACY_POLICY.md      Privacy policy and open-source disclaimer
 ```
+
+## API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Health check |
+| GET | `/status` | Dependency status (HydraDB, OpenRouter, Mic, IMAP) |
+| GET | `/contacts` | List contacts from HydraDB + local cache |
+| GET | `/graph` | Relationship graph data |
+| GET | `/brief/{email}` | Generate pre-call brief for a contact |
+| POST | `/configure` | Save API keys to `.env` |
+| POST | `/recording/start` | Start live audio capture |
+| POST | `/recording/stop` | Stop live audio capture |
+| POST | `/ingest/file` | Upload .eml/.mbox files |
+| POST | `/ingest/emails` | Trigger Gmail ingestion |
+| POST | `/ingest/imap` | Trigger IMAP sync (saves credentials) |
+| GET | `/imap/credentials` | List stored IMAP hosts |
+| POST | `/imap/credentials/use` | Re-use stored IMAP credentials |
+| DELETE | `/imap/credentials` | Delete stored IMAP credentials |
+| DELETE | `/data/transcripts` | Clear transcript buffer |
+| DELETE | `/data/contacts` | Delete local contacts |
+| DELETE | `/data/all` | Delete all local data |
+| WS | `/ws/transcript` | WebSocket for live transcript, briefs, errors |
 
 ## Documentation
 
@@ -133,6 +167,15 @@ scripts/               Renderer smoke test
 - [HydraDB Integration](docs/HYDRADB_INTEGRATION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Setup Guide](docs/SETUP.md)
+- [Privacy Policy](PRIVACY_POLICY.md)
+
+## Privacy & Security
+
+- IMAP credentials are encrypted at rest using Fernet symmetric encryption.
+- All API endpoints are rate-limited.
+- LLM failures are surfaced to users, not silently swallowed.
+- Data retention controls let users delete local data from the Settings panel.
+- See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for the full privacy policy and open-source disclaimer.
 
 ## Submission Summary
 

@@ -1,6 +1,6 @@
 import json
 import re
-from typing import cast
+from typing import Any, cast
 
 from openrouter_client import chat, extract_content, parse_model_list
 from sidecar_types import ExtractionResult
@@ -46,7 +46,19 @@ _EMPTY_EXTRACTION: ExtractionResult = {
 }
 
 
+class ExtractionError(Exception):
+    """Raised when entity extraction fails with a user-facing message."""
+    def __init__(self, message: str, error_type: str = "extraction_failed"):
+        super().__init__(message)
+        self.error_type = error_type
+
+
 async def extract_entities(text: str) -> ExtractionResult:
+    """Extract relationship entities from text.
+
+    Raises ExtractionError on failure so callers can surface the error to the user
+    instead of silently returning empty data.
+    """
     if not text.strip():
         return {**_EMPTY_EXTRACTION}
 
@@ -61,13 +73,30 @@ async def extract_entities(text: str) -> ExtractionResult:
             max_tokens=1200,
         )
         content = extract_content(response)
+        if not content.strip():
+            raise ExtractionError("Extraction model returned an empty response.", "empty_response")
         return cast(ExtractionResult, json.loads(_strip_json_fences(content)))
+    except ExtractionError:
+        raise
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        print(f"Entity extraction: LLM returned malformed response — {exc}")
-        return {**_EMPTY_EXTRACTION}
+        raise ExtractionError(
+            f"Extraction model returned invalid data: {exc}",
+            "malformed_response",
+        ) from exc
     except Exception as exc:
-        print(f"Entity extraction: API call failed — {exc}")
-        return {**_EMPTY_EXTRACTION}
+        raise ExtractionError(
+            f"Extraction API call failed: {exc}",
+            "api_error",
+        ) from exc
+
+
+async def extract_entities_safe(text: str) -> tuple[ExtractionResult, str | None]:
+    """Non-raising wrapper: returns (extraction, error_message_or_none)."""
+    try:
+        result = await extract_entities(text)
+        return result, None
+    except ExtractionError as exc:
+        return {**_EMPTY_EXTRACTION}, str(exc)
 
 
 def has_meaningful_extraction(extracted: ExtractionResult) -> bool:

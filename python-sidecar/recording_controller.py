@@ -43,16 +43,15 @@ def create_recording_routes(session: RecordingSession, clients: ConnectionManage
             await _push_transcript(text)
             if len(session.buffer) % 5 == 0:
                 contact = session.contact or {}
-                task = asyncio.create_task(
-                    process_interaction(
-                        text=" ".join(session.buffer[-10:]),
-                        contact_email=contact.get("contactEmail"),
-                        contact_name=contact.get("contactName"),
-                        company=contact.get("company"),
-                        interaction_type="call",
-                    )
+                error = await process_interaction(
+                    text=" ".join(session.buffer[-10:]),
+                    contact_email=contact.get("contactEmail"),
+                    contact_name=contact.get("contactName"),
+                    company=contact.get("company"),
+                    interaction_type="call",
                 )
-                task.add_done_callback(lambda t: clients.on_task_error(t))
+                if error:
+                    await clients.broadcast({"type": "error", "message": f"Extraction warning: {error}"})
 
         session.capture = AudioCapture(on_text)
         session.capture.start()
@@ -66,16 +65,15 @@ def create_recording_routes(session: RecordingSession, clients: ConnectionManage
             session.capture.stop()
         if session.buffer and session.contact:
             contact = session.contact
-            task = asyncio.create_task(
-                process_interaction(
-                    text=" ".join(session.buffer),
-                    contact_email=contact.get("contactEmail"),
-                    contact_name=contact.get("contactName"),
-                    company=contact.get("company"),
-                    interaction_type="call",
-                )
+            error = await process_interaction(
+                text=" ".join(session.buffer),
+                contact_email=contact.get("contactEmail"),
+                contact_name=contact.get("contactName"),
+                company=contact.get("company"),
+                interaction_type="call",
             )
-            task.add_done_callback(lambda t: clients.on_task_error(t))
+            if error:
+                await clients.broadcast({"type": "error", "message": f"Extraction error: {error}"})
         await _push_transcript("Recording stopped. Processing final chunk.")
         return {"status": "stopped"}
 

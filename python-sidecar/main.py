@@ -10,8 +10,11 @@ load_dotenv(override=True)
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
-from brief_generator import generate_pre_call_brief
+from brief_generator import generate_pre_call_brief_safe
 from calendar_poller import poll_for_upcoming_meetings
 from contact_repository import fetch_contacts as _fetch_contacts
 from hydradb_client import API_KEY as HYDRADB_API_KEY
@@ -28,6 +31,7 @@ from ws_manager import ConnectionManager
 
 _clients = ConnectionManager()
 _session = RecordingSession()
+_limiter = Limiter(key_func=get_remote_address)
 
 
 # ---------------------------------------------------------------------------
@@ -37,12 +41,15 @@ _session = RecordingSession()
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     async def on_upcoming_meeting(meeting_info: MeetingInfo) -> None:
-        brief = await generate_pre_call_brief(
+        brief, error = await generate_pre_call_brief_safe(
             contact_email=meeting_info.get("contact_email", ""),
             contact_name=meeting_info.get("contact_name", ""),
             company=meeting_info.get("company", ""),
         )
-        await _clients.broadcast({"type": "brief", "data": {**brief, "trigger": "calendar"}})
+        if brief:
+            await _clients.broadcast({"type": "brief", "data": {**brief, "trigger": "calendar"}})
+        elif error:
+            await _clients.broadcast({"type": "error", "message": f"Brief generation failed: {error}"})
 
     asyncio.create_task(poll_for_upcoming_meetings(on_upcoming_meeting))
     yield
@@ -63,6 +70,8 @@ _ALLOWED_ORIGINS = [
 ]
 
 app = FastAPI(title="Rapport Sidecar", version="0.1.0", lifespan=lifespan)
+app.state.limiter = _limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
@@ -81,7 +90,8 @@ async def health():
 
 
 @app.get("/status")
-async def get_status():
+@_limiter.limit("30/minute")
+async def get_status(request):  # noqa: ARG001
     mic_ok, mic_reason = _check_mic()
     return {
         "hydradb": {"ok": bool(HYDRADB_API_KEY), "reason": None if HYDRADB_API_KEY else "HYDRA_DB_API_KEY not set"},
@@ -92,7 +102,8 @@ async def get_status():
 
 
 @app.post("/configure")
-async def configure(body: dict[str, Any]):
+@_limiter.limit("10/minute")
+async def configure(request, body: dict[str, Any]):  # noqa: ARG001
     """Persist API keys to the sidecar's .env file.
 
     BUG-6 fix: use python-dotenv's ``set_key`` helper which correctly quotes
@@ -127,23 +138,26 @@ async def transcript_ws(websocket: WebSocket):
 
 
 @app.get("/contacts")
-async def list_contacts():
+@_limiter.limit("30/minute")
+async def list_contacts(request):  # noqa: ARG001
     return await _fetch_contacts()
 
 
 @app.get("/graph")
-async def get_graph():
+@_limiter.limit("30/minute")
+async def get_graph(request):  # noqa: ARG001
     return await build_graph()
 
 
 @app.get("/brief/{contact_email}")
-async def get_brief(contact_email: str, contact_name: str, company: str):
-    try:
-        return await generate_pre_call_brief(contact_email, contact_name, company)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Brief generation failed: {exc}")
+@_limiter.limit("20/minute")
+async def get_brief(request, contact_email: str, contact_name: str, company: str):  # noqa: ARG001
+    brief, error = await generate_pre_call_brief_safe(contact_email, contact_name, company)
+    if error:
+        raise HTTPException(status_code=502, detail=f"Brief generation failed: {error}")
+    if brief is None:
+        raise HTTPException(status_code=502, detail="Brief generation returned no data.")
+    return brief
 
 
 # ---------------------------------------------------------------------------

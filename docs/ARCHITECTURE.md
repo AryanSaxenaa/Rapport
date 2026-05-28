@@ -134,4 +134,8 @@ sequenceDiagram
 - Secrets are not exposed through the preload bridge.
 - Gmail tokens should be stored outside the app bundle.
 - Recording state is visible in the UI.
-- Future production builds should add explicit meeting opt-in and local transcript retention controls.
+- IMAP credentials are encrypted at rest using Fernet symmetric encryption.
+- All API endpoints are rate-limited to prevent abuse.
+- LLM extraction and brief generation failures are surfaced to users via WebSocket errors.
+- Data retention controls allow users to delete local contacts, credentials, and all local data via the Settings panel.
+- Extraction errors are returned to the user instead of silently returning empty data.

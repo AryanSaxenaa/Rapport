@@ -120,9 +120,22 @@ function createWindow() {
 }
 
 function createTray() {
-  const image = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4AWP4TyFgGEY0AhyG/6H4Tw0jGgGOYRBmAQDsrAgR3FeJ9QAAAABJRU5ErkJggg=='
-  )
+  const trayIconPath = path.join(appRoot(), isDev ? 'src' : '', 'resources', 'tray-icon.png')
+  let image: Electron.NativeImage
+  try {
+    image = nativeImage.createFromPath(trayIconPath)
+    if (image.isEmpty()) throw new Error('empty')
+  } catch {
+    // Fallback: generate a 32x32 "R" icon using nativeImage
+    image = nativeImage.createEmpty()
+    const size = 32
+    const canvas = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <rect width="${size}" height="${size}" rx="6" fill="#6C63FF"/>
+      <text x="16" y="23" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF">R</text>
+    </svg>`
+    // Electron can load SVG data URLs for nativeImage
+    image = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(canvas).toString('base64')}`)
+  }
   tray = new Tray(image)
   tray.setToolTip('Rapport')
   tray.setContextMenu(

@@ -20,7 +20,18 @@ _BRIEF_MODELS = parse_model_list("BRIEF_MODEL", "openrouter/owl-alpha,poolside/l
 _FENCE_RE = re.compile(r"^```[a-z]*\n?", re.MULTILINE)
 
 
+class BriefGenerationError(Exception):
+    """Raised when brief generation fails with a user-facing message."""
+    def __init__(self, message: str, error_type: str = "brief_failed"):
+        super().__init__(message)
+        self.error_type = error_type
+
+
 async def generate_pre_call_brief(contact_email: str, contact_name: str, company: str) -> dict[str, Any]:
+    """Generate a pre-call brief.
+
+    Raises BriefGenerationError on failure so callers can surface the error.
+    """
     context = await _recall_contact_context(contact_email, contact_name, company)
     response = await chat(
         messages=[{
@@ -36,7 +47,25 @@ async def generate_pre_call_brief(contact_email: str, contact_name: str, company
         temperature=0.2,
         max_tokens=1500,
     )
-    return json.loads(_strip_json_fences(extract_content(response)))
+    content = extract_content(response)
+    if not content.strip():
+        raise BriefGenerationError("Brief model returned an empty response.", "empty_response")
+    try:
+        return json.loads(_strip_json_fences(content))
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise BriefGenerationError(
+            f"Brief model returned invalid data: {exc}",
+            "malformed_response",
+        ) from exc
+
+
+async def generate_pre_call_brief_safe(contact_email: str, contact_name: str, company: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Non-raising wrapper: returns (brief_or_none, error_message_or_none)."""
+    try:
+        brief = await generate_pre_call_brief(contact_email, contact_name, company)
+        return brief, None
+    except BriefGenerationError as exc:
+        return None, str(exc)
 
 
 def _strip_json_fences(text: str) -> str:

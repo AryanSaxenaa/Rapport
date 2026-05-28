@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { CheckCircle, Database, Mic, RefreshCw, Server, Wifi, X } from 'lucide-react'
-import { useRapportStore } from '../store/rapport-store'
+import { CheckCircle, Database, Mic, RefreshCw, Server, Trash2, Wifi, X } from 'lucide-react'
+import { SIDECAR_URL, useRapportStore } from '../store/rapport-store'
 import type { SidecarStatusDeps } from '../store/rapport-store'
 
 const DEP_ICONS: Record<string, ReactNode> = {
@@ -29,6 +29,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [imapStatus, setImapStatus] = useState<string | null>(null)
   const [imapError, setImapError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
+
+  const [deleteStatus, setDeleteStatus] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     void fetchDepStatus()
@@ -58,6 +61,20 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       setImapError(msg.includes('401') ? 'Authentication failed — check your app password.' : `Sync failed: ${msg}`)
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function handleDeleteData(endpoint: string, label: string) {
+    setDeleteStatus(null)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`${SIDECAR_URL}${endpoint}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setDeleteStatus(`${label} deleted.`)
+      void fetchContacts()
+      void fetchGraph()
+    } catch (err: unknown) {
+      setDeleteError(`Failed to delete ${label}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -145,7 +162,34 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             disabled={syncing}
           >
             {syncing ? <RefreshCw size={12} className="spin" /> : <Wifi size={12} />}
-            {syncing ? 'Connecting…' : 'Sync inbox'}
+            {syncing ? 'Connecting...' : 'Sync inbox'}
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <span className="micro-label">Data retention</span>
+        <p className="settings-dim">Delete locally stored data. This does not affect data stored in HydraDB.</p>
+        {deleteStatus && (
+          <p className="settings-ok">
+            <CheckCircle size={11} /> {deleteStatus}
+          </p>
+        )}
+        {deleteError && <p className="settings-error">{deleteError}</p>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button
+            className="settings-action"
+            style={{ background: 'rgba(255, 80, 80, 0.15)', color: '#ff6b6b' }}
+            onClick={() => void handleDeleteData('/data/contacts', 'Local contacts')}
+          >
+            <Trash2 size={12} /> Delete local contacts
+          </button>
+          <button
+            className="settings-action"
+            style={{ background: 'rgba(255, 80, 80, 0.15)', color: '#ff6b6b' }}
+            onClick={() => void handleDeleteData('/data/all', 'All local data')}
+          >
+            <Trash2 size={12} /> Delete all local data
           </button>
         </div>
       </div>

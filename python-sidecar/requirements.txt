@@ -13,3 +13,5 @@ hydradb-sdk>=0.0.3
 python-multipart>=0.0.9
 sounddevice>=0.5.0
 numpy>=1.26.0
+cryptography>=44.0.0
+slowapi>=0.1.9

@@ -1,45 +1,71 @@
-# Rapport
+<h1 align="center">Rapport</h1>
 
-**AI relationship memory for every important conversation, powered by HydraDB.**
+<p align="center">
+  <strong>AI relationship memory for every important conversation.</strong>
+</p>
 
-Rapport is a desktop relationship-intelligence overlay that turns emails, calls, and meeting context into durable memory. It retrieves real contacts from HydraDB, visualizes relationship context, supports live call capture, and generates tactical pre-call briefs so users can walk into conversations with context instead of guesswork.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform" /></a>
+  <img src="https://img.shields.io/badge/stack-TypeScript%20%7C%20React%20%7C%20Python%20%7C%20FastAPI-informational" alt="Stack" />
+</p>
 
-<img width="1919" height="1026" alt="Screenshot 2026-05-18 220957" src="https://github.com/user-attachments/assets/584b05e1-6dc1-4e69-b320-54474d95212e" />
+<br />
 
-## Tagline
+<img width="1919" height="1026" alt="Rapport screenshot" src="https://github.com/user-attachments/assets/584b05e1-6dc1-4e69-b320-54474d95212e" />
 
-AI relationship memory that turns emails and calls into live context for better conversations.
+<!-- TODO: Add a 30-second GIF demo showing the core loop: contact list → brief generation → live call capture -->
+
+---
 
 ## What It Does
 
-Relationship context is usually scattered across inboxes, meeting notes, and memory. Rapport brings that context into a compact desktop companion:
+Relationship context is scattered across inboxes, meeting notes, and memory. Rapport brings it into a compact desktop companion so you walk into every conversation prepared.
 
-- Loads real contacts from HydraDB memory.
-- Shows each contact's stance, company, email, topics, and last interaction.
-- Visualizes the relationship network with a D3 graph.
-- Ingests email context and writes extracted relationship signals into HydraDB.
-- Starts live capture for calls and stores important conversation signals.
-- Generates pre-call briefs with talking points, concerns, landmines, and next steps.
-- Syncs emails via Gmail OAuth, IMAP, or drag-and-drop .eml/.mbox import.
-- Polls Google Calendar for upcoming meetings and auto-generates briefs.
-- Encrypts stored IMAP credentials at rest using Fernet symmetric encryption.
-- Provides data retention controls to delete local contacts, credentials, and all data.
-- Surfaces LLM extraction and brief generation errors to the user in real time.
-- Rate-limits status, contacts, graph, brief, and configure endpoints to prevent abuse.
+- **Pre-call briefs** — Tactical talking points, concerns, landmines, and communication style from past interactions
+- **Live call capture** — Records and transcribes calls in real time, extracting stance shifts and commitments
+- **Email ingestion** — Processes Gmail, IMAP, or `.eml`/`.mbox` files for relationship signals
+- **Relationship graph** — Visualizes your network with person nodes and evidence-based edges (influencers, blockers, decision chains)
+- **Calendar polling** — Detects upcoming meetings and auto-generates briefs for attendees
 
-## Why HydraDB
+Rapport uses [HydraDB](https://hydradb.ai) as its memory layer — storing behavioral observations from every interaction and recalling them when you need context. Sub-tenant isolation keeps each contact's memory separate while full recall brings company-wide knowledge into every brief.
 
-HydraDB is the core memory layer for Rapport. The app uses it to store relationship observations and recall them later across sessions.
+## Quick Start
 
-Rapport uses HydraDB for:
+Install dependencies:
 
-- Per-contact memory through sub-tenant isolation.
-- Durable interaction history from email and call capture.
-- Contextual recall through `recall_preferences` and `full_recall`.
-- Relationship graph discovery from stored memory sources.
-- A practical long-context workflow where memory changes the UI, not just a chat response.
+```bash
+npm install
+pip install -r python-sidecar/requirements.txt
+```
 
-The short version: **HydraDB remembers the relationship. Rapport helps you act on it.**
+Copy `.env.example` to `.env` and set your keys:
+
+```env
+HYDRA_DB_API_KEY=...
+HYDRA_DB_TENANT_ID=...
+OPENROUTER_API_KEY=...
+MY_EMAIL=you@example.com
+```
+
+Run the desktop app:
+
+```bash
+npm run dev
+```
+
+Run only the Python sidecar:
+
+```bash
+npm run sidecar
+```
+
+Verify everything works:
+
+```bash
+npm run build
+curl http://127.0.0.1:8765/health
+```
 
 ## Architecture
 
@@ -57,147 +83,54 @@ flowchart LR
   GRAPH --> UI
 ```
 
+The Electron main process spawns the Python sidecar on launch. The React renderer communicates through a secure preload bridge — it never talks to HydraDB or external APIs directly. Secrets stay in environment variables, never exposed to the frontend.
+
+For a deeper walkthrough, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Built With
 
-- Electron
-- React
-- TypeScript
-- Vite
-- Python
-- FastAPI
-- HydraDB
-- D3
-- OpenRouter
-- Gmail API
-- Calendar API
-- IMAP
-- cryptography (Fernet encryption for IMAP credentials)
-- slowapi (API rate limiting)
-
-## Quick Start
-
-Install dependencies:
-
-```powershell
-npm install
-python -m pip install -r python-sidecar/requirements.txt
-```
-
-Create `.env` from `.env.example` and set your keys:
-
-```env
-HYDRA_DB_API_KEY=...
-HYDRA_DB_TENANT_ID=...
-OPENROUTER_API_KEY=...
-MY_EMAIL=you@example.com
-```
-
-Run the desktop app:
-
-```powershell
-npm run dev
-```
-
-If port `5173` is busy, Electron Vite will choose another renderer port automatically.
-
-Run only the Python sidecar:
-
-```powershell
-npm run sidecar
-```
-
-Check the contacts endpoint:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8765/contacts | ConvertTo-Json -Depth 5
-```
-
-## Verification
-
-```powershell
-npm run build
-```
-
-Optional renderer smoke test, once the Vite renderer is running:
-
-```powershell
-node scripts/smoke-renderer.mjs
-```
-
-## Project Structure
-
-```text
-src/main/                  Electron main process and sidecar orchestration
-src/preload/               Secure Electron IPC bridge
-src/renderer/              React UI and relationship graph
-python-sidecar/            FastAPI app, HydraDB integration, ingestion, recall
-  main.py                  FastAPI entry point and routes
-  hydradb_client.py        HydraDB SDK wrapper with retry logic
-  entity_extractor.py      LLM-based relationship signal extraction
-  brief_generator.py       Pre-call brief synthesis
-  ingestion_pipeline.py    Orchestrates extract -> HydraDB -> graph flow
-  ingestion_controller.py  Email ingestion routes (file, Gmail, IMAP)
-  recording_controller.py  Live audio capture routes
-  audio_capture.py         Microphone capture with sounddevice
-  transcription.py         OpenRouter Whisper transcription
-  contact_repository.py    Contact list from HydraDB + local cache
-  contact_persistence.py   Local JSON contact storage
-  relationship_graph.py    D3 graph data from HydraDB relations
-  gmail_reader.py          Gmail API email reader
-  imap_reader.py           IMAP SSL email reader
-  email_file_reader.py     .eml/.mbox file parser
-  calendar_poller.py       Google Calendar meeting detection
-  google_oauth.py          Shared Google OAuth helper
-  openrouter_client.py     OpenRouter API client
-  imap_secret_store.py     Encrypted IMAP credential storage
-  sidecar_types.py         Shared TypedDict definitions
-  ws_manager.py            WebSocket connection manager
-  html_utils.py            HTML stripping and email parsing utilities
-resources/                 Tray icon and app assets
-docs/                      Pitch, architecture, setup, and integration notes
-scripts/                   Renderer smoke test
-PRIVACY_POLICY.md          Privacy policy and open-source disclaimer
-```
-
-## API Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/health` | Health check |
-| GET | `/status` | Dependency status (HydraDB, OpenRouter, Mic, IMAP) |
-| GET | `/contacts` | List contacts from HydraDB + local cache |
-| GET | `/graph` | Relationship graph data |
-| GET | `/brief/{email}?contact_name=...&company=...` | Generate pre-call brief for a contact |
-| POST | `/configure` | Save API keys to `.env` |
-| POST | `/recording/start` | Start live audio capture |
-| POST | `/recording/stop` | Stop live audio capture |
-| POST | `/ingest/file` | Upload .eml/.mbox files |
-| POST | `/ingest/emails` | Trigger Gmail ingestion |
-| POST | `/ingest/imap` | Trigger IMAP sync (saves credentials) |
-| GET | `/imap/credentials` | List stored IMAP hosts |
-| POST | `/imap/credentials/use` | Re-use stored IMAP credentials |
-| DELETE | `/imap/credentials` | Delete stored IMAP credentials |
-| DELETE | `/data/transcripts` | Clear transcript buffer |
-| DELETE | `/data/contacts` | Delete local contacts |
-| DELETE | `/data/all` | Delete all local data |
-| WS | `/ws/transcript` | WebSocket for live transcript, briefs, errors |
+| Layer | Stack |
+|---|---|
+| Desktop shell | Electron 33 |
+| UI | React 19, TypeScript, Vite, D3, Framer Motion |
+| State | Zustand |
+| Intelligence sidecar | Python 3.10+, FastAPI, Uvicorn |
+| Memory | HydraDB |
+| AI / LLM | OpenRouter (extraction + transcription + briefs) |
+| Ingestion | Gmail API, IMAP, Google Calendar |
+| Security | Fernet encryption (IMAP credentials), slowapi (rate limiting) |
 
 ## Documentation
 
-- [Product Pitch](docs/PITCH.md)
-- [HydraDB Integration](docs/HYDRADB_INTEGRATION.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [API Reference](docs/API.md)
 - [Setup Guide](docs/SETUP.md)
+- [HydraDB Integration](docs/HYDRADB_INTEGRATION.md)
 - [Privacy Policy](PRIVACY_POLICY.md)
+
+## Contributing
+
+Contributions are welcome. Rapport is Apache 2.0 licensed and open to improvements of any size — bug fixes, features, docs, or design.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and submission guidelines.
 
 ## Privacy & Security
 
-- IMAP credentials are encrypted at rest using Fernet symmetric encryption.
-- Rate limiting on status, contacts, graph, brief, and configure endpoints.
-- LLM failures are surfaced to users, not silently swallowed.
-- Data retention controls let users delete local data from the Settings panel.
-- See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for the full privacy policy and open-source disclaimer.
+- IMAP credentials are encrypted at rest using Fernet symmetric encryption
+- API keys live in environment variables only — never exposed to the frontend
+- Rate limiting on key endpoints prevents abuse
+- LLM failures are surfaced to users, not silently swallowed
+- Data retention controls let you delete local contacts, credentials, and all data
+- Recording consent is your responsibility — Rapport does not auto-notify participants
 
-## Submission Summary
+See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for the full privacy policy and open-source disclaimer.
 
-Rapport is an AI-powered relationship memory overlay. It uses HydraDB to store and recall context from emails and conversations, then surfaces contacts, relationship graphs, and pre-call briefs in a live desktop UI.
+## License
+
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for the full text.
+
+---
+
+<p align="center">
+  Built with <a href="https://hydradb.ai">HydraDB</a>
+</p>

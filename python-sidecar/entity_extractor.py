@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Any, cast
+from typing import cast
 
 from openrouter_client import chat, extract_content, parse_model_list
 from sidecar_types import ExtractionResult

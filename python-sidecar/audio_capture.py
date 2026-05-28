@@ -3,8 +3,6 @@ import io
 import os
 import wave
 from collections.abc import Awaitable, Callable
-from typing import Any
-
 import numpy as np
 
 try:

@@ -8,7 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from entity_extractor import extract_entities, _EXTRACTION_MODELS, _EMPTY_EXTRACTION
+from entity_extractor import _EXTRACTION_MODELS, _EMPTY_EXTRACTION
 
 
 class TestModelConfig(unittest.TestCase):

@@ -7,8 +7,8 @@ from typing import Any, TypeVar, overload
 from hydra_db import AsyncHydraDB
 from hydra_db.core import ApiError
 
-from contact_persistence import normalize_contact, save_local_contact
-from sidecar_types import ErrorPayload, ExtractionResult, ContactDict
+from contact_persistence import save_local_contact
+from sidecar_types import ErrorPayload, ExtractionResult
 
 T = TypeVar("T")
 

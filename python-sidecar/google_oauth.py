@@ -1,15 +1,12 @@
 """Shared Google OAuth helper for Gmail and Calendar."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-
-if TYPE_CHECKING:
-    from googleapiclient.discovery import Resource
 
 CREDENTIALS_PATH = Path(__file__).parent / "credentials.json"
 TOKEN_DIR = Path.home() / ".rapport"

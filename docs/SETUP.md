@@ -41,7 +41,7 @@ BRIEF_MODEL=openrouter/owl-alpha,poolside/laguna-m.1:free
 MY_EMAIL=you@example.com
 ```
 
-Only `HYDRA_DB_TENANT_ID` is used; the legacy `HYDRADB_TENANT_ID` variant has been removed.
+`HYDRA_DB_TENANT_ID` is preferred. The legacy `HYDRADB_TENANT_ID` variant is still accepted as a fallback.
 
 Model env vars (`EXTRACTION_MODEL`, `BRIEF_MODEL`) accept comma-separated model IDs. The first is the primary model; subsequent entries are fallbacks tried if the primary is unavailable. Both default to `openrouter/owl-alpha,poolside/laguna-m.1:free`.
 
@@ -101,7 +101,7 @@ python -m pip show hydradb-sdk
 
 ### Missing HydraDB Env Vars
 
-The app still runs, but brief generation will use conservative fallback data. Set `HYDRA_DB_API_KEY` and `HYDRA_DB_TENANT_ID` (not the legacy `HYDRADB_*` variants).
+The app still runs, but brief generation will use conservative fallback data. Set `HYDRA_DB_API_KEY` and `HYDRA_DB_TENANT_ID` (or the legacy `HYDRADB_TENANT_ID` fallback).
 
 ### Tenant Not Ready
 

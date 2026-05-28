@@ -120,7 +120,7 @@ function createWindow() {
 }
 
 function createTray() {
-  const trayIconPath = path.join(appRoot(), isDev ? 'src' : '', 'resources', 'tray-icon.png')
+  const trayIconPath = path.join(appRoot(), isDev ? 'src' : '', 'resources', 'tray-icon.svg')
   let image: Electron.NativeImage
   try {
     image = nativeImage.createFromPath(trayIconPath)

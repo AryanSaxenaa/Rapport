@@ -25,7 +25,7 @@ Relationship context is usually scattered across inboxes, meeting notes, and mem
 - Encrypts stored IMAP credentials at rest using Fernet symmetric encryption.
 - Provides data retention controls to delete local contacts, credentials, and all data.
 - Surfaces LLM extraction and brief generation errors to the user in real time.
-- Rate-limits all API endpoints to prevent abuse.
+- Rate-limits status, contacts, graph, brief, and configure endpoints to prevent abuse.
 
 ## Why HydraDB
 
@@ -127,15 +127,36 @@ node scripts/smoke-renderer.mjs
 ## Project Structure
 
 ```text
-src/main/              Electron main process and sidecar orchestration
-src/preload/           Secure Electron IPC bridge
-src/renderer/          React UI and relationship graph
-python-sidecar/        FastAPI app, HydraDB integration, ingestion, recall
-python-sidecar/imap_secret_store.py   Encrypted IMAP credential storage
-resources/             Tray icon and app assets
-docs/                  Pitch, architecture, setup, and integration notes
-scripts/               Renderer smoke test
-PRIVACY_POLICY.md      Privacy policy and open-source disclaimer
+src/main/                  Electron main process and sidecar orchestration
+src/preload/               Secure Electron IPC bridge
+src/renderer/              React UI and relationship graph
+python-sidecar/            FastAPI app, HydraDB integration, ingestion, recall
+  main.py                  FastAPI entry point and routes
+  hydradb_client.py        HydraDB SDK wrapper with retry logic
+  entity_extractor.py      LLM-based relationship signal extraction
+  brief_generator.py       Pre-call brief synthesis
+  ingestion_pipeline.py    Orchestrates extract -> HydraDB -> graph flow
+  ingestion_controller.py  Email ingestion routes (file, Gmail, IMAP)
+  recording_controller.py  Live audio capture routes
+  audio_capture.py         Microphone capture with sounddevice
+  transcription.py         OpenRouter Whisper transcription
+  contact_repository.py    Contact list from HydraDB + local cache
+  contact_persistence.py   Local JSON contact storage
+  relationship_graph.py    D3 graph data from HydraDB relations
+  gmail_reader.py          Gmail API email reader
+  imap_reader.py           IMAP SSL email reader
+  email_file_reader.py     .eml/.mbox file parser
+  calendar_poller.py       Google Calendar meeting detection
+  google_oauth.py          Shared Google OAuth helper
+  openrouter_client.py     OpenRouter API client
+  imap_secret_store.py     Encrypted IMAP credential storage
+  sidecar_types.py         Shared TypedDict definitions
+  ws_manager.py            WebSocket connection manager
+  html_utils.py            HTML stripping and email parsing utilities
+resources/                 Tray icon and app assets
+docs/                      Pitch, architecture, setup, and integration notes
+scripts/                   Renderer smoke test
+PRIVACY_POLICY.md          Privacy policy and open-source disclaimer
 ```
 
 ## API Endpoints
@@ -146,7 +167,7 @@ PRIVACY_POLICY.md      Privacy policy and open-source disclaimer
 | GET | `/status` | Dependency status (HydraDB, OpenRouter, Mic, IMAP) |
 | GET | `/contacts` | List contacts from HydraDB + local cache |
 | GET | `/graph` | Relationship graph data |
-| GET | `/brief/{email}` | Generate pre-call brief for a contact |
+| GET | `/brief/{email}?contact_name=...&company=...` | Generate pre-call brief for a contact |
 | POST | `/configure` | Save API keys to `.env` |
 | POST | `/recording/start` | Start live audio capture |
 | POST | `/recording/stop` | Stop live audio capture |
@@ -172,7 +193,7 @@ PRIVACY_POLICY.md      Privacy policy and open-source disclaimer
 ## Privacy & Security
 
 - IMAP credentials are encrypted at rest using Fernet symmetric encryption.
-- All API endpoints are rate-limited.
+- Rate limiting on status, contacts, graph, brief, and configure endpoints.
 - LLM failures are surfaced to users, not silently swallowed.
 - Data retention controls let users delete local data from the Settings panel.
 - See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for the full privacy policy and open-source disclaimer.

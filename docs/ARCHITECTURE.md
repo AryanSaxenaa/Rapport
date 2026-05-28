@@ -135,7 +135,7 @@ sequenceDiagram
 - Gmail tokens should be stored outside the app bundle.
 - Recording state is visible in the UI.
 - IMAP credentials are encrypted at rest using Fernet symmetric encryption.
-- All API endpoints are rate-limited to prevent abuse.
+- Rate limiting on status, contacts, graph, brief, and configure endpoints to prevent abuse.
 - LLM extraction and brief generation failures are surfaced to users via WebSocket errors.
 - Data retention controls allow users to delete local contacts, credentials, and all local data via the Settings panel.
 - Extraction errors are returned to the user instead of silently returning empty data.

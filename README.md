@@ -132,5 +132,5 @@ This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE) fo
 ---
 
 <p align="center">
-  Built with <a href="https://hydradb.ai">HydraDB</a>
+  Built with <a href="https://hydradb.com">HydraDB</a>
 </p>

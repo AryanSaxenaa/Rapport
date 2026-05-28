@@ -1,8 +1,6 @@
 import asyncio
 import json
-import re
-from typing import Any
-
+from html_utils import strip_json_fences
 from hydradb_client import (
     TENANT_ID,
     API_KEY,
@@ -13,25 +11,18 @@ from hydradb_client import (
     _to_plain_data,
 )
 from openrouter_client import chat, extract_content, parse_model_list
+from sidecar_types import BriefDict
 
 _BRIEF_MODELS = parse_model_list("BRIEF_MODEL", "openrouter/owl-alpha,poolside/laguna-m.1:free")
 
-# Matches leading ```json / ``` fences that LLMs add around JSON responses.
-_FENCE_RE = re.compile(r"^```[a-z]*\n?", re.MULTILINE)
-
 
 class BriefGenerationError(Exception):
-    """Raised when brief generation fails with a user-facing message."""
     def __init__(self, message: str, error_type: str = "brief_failed"):
         super().__init__(message)
         self.error_type = error_type
 
 
-async def generate_pre_call_brief(contact_email: str, contact_name: str, company: str) -> dict[str, Any]:
-    """Generate a pre-call brief.
-
-    Raises BriefGenerationError on failure so callers can surface the error.
-    """
+async def generate_pre_call_brief(contact_email: str, contact_name: str, company: str) -> BriefDict:
     context = await _recall_contact_context(contact_email, contact_name, company)
     response = await chat(
         messages=[{
@@ -51,7 +42,7 @@ async def generate_pre_call_brief(contact_email: str, contact_name: str, company
     if not content.strip():
         raise BriefGenerationError("Brief model returned an empty response.", "empty_response")
     try:
-        return json.loads(_strip_json_fences(content))
+        return json.loads(strip_json_fences(content))
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         raise BriefGenerationError(
             f"Brief model returned invalid data: {exc}",
@@ -59,19 +50,13 @@ async def generate_pre_call_brief(contact_email: str, contact_name: str, company
         ) from exc
 
 
-async def generate_pre_call_brief_safe(contact_email: str, contact_name: str, company: str) -> tuple[dict[str, Any] | None, str | None]:
+async def generate_pre_call_brief_safe(contact_email: str, contact_name: str, company: str) -> tuple[BriefDict | None, str | None]:
     """Non-raising wrapper: returns (brief_or_none, error_message_or_none)."""
     try:
         brief = await generate_pre_call_brief(contact_email, contact_name, company)
         return brief, None
     except BriefGenerationError as exc:
         return None, str(exc)
-
-
-def _strip_json_fences(text: str) -> str:
-    """Remove markdown code fences that LLMs commonly wrap JSON responses in."""
-    text = _FENCE_RE.sub("", text.strip())
-    return text.rstrip("`").strip()
 
 
 async def _recall_contact_context(contact_email: str, contact_name: str, company: str) -> str:
@@ -113,7 +98,7 @@ async def _recall_contact_context(contact_email: str, contact_name: str, company
     return _format_recall_context(prefs, knowledge)
 
 
-def _format_recall_context(prefs: dict[str, Any], knowledge: dict[str, Any]) -> str:
+def _format_recall_context(prefs: dict[str, object], knowledge: dict[str, object]) -> str:
     lines: list[str] = []
     lines.append("=== PREFERENCES & STANCE ===")
     prefs_plain = _to_plain_data(prefs)

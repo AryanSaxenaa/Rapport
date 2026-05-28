@@ -12,7 +12,6 @@ from entity_extractor import _EXTRACTION_MODELS, _EMPTY_EXTRACTION
 
 
 class TestModelConfig(unittest.TestCase):
-    """Verify the model configuration env var parsing."""
 
     def test_default_models(self):
         models = _EXTRACTION_MODELS
@@ -42,7 +41,6 @@ class TestModelConfig(unittest.TestCase):
 
 
 class TestEmptyExtraction(unittest.TestCase):
-    """Verify the empty extraction return value shape."""
 
     def test_returns_dict(self):
         self.assertIsInstance(_EMPTY_EXTRACTION, dict)

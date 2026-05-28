@@ -2,13 +2,11 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
-
 from dotenv import load_dotenv, set_key
 
 load_dotenv(override=True)
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -35,7 +33,7 @@ _limiter = Limiter(key_func=get_remote_address)
 
 
 # ---------------------------------------------------------------------------
-# Lifespan (replaces deprecated @app.on_event("startup"))
+# Lifespan
 # ---------------------------------------------------------------------------
 
 @asynccontextmanager
@@ -59,10 +57,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 # App
 # ---------------------------------------------------------------------------
 
-# BUG-34: Restrict CORS to known local origins instead of wildcard "*".
-# The Electron renderer loads from either the Vite dev server or the
-# file:// / app:// scheme.  Allowing only these prevents any website the user
-# visits from making cross-origin requests to the local sidecar.
+# Restrict CORS to known local origins (prevent external websites from reaching the sidecar)
 _ALLOWED_ORIGINS = [
     "http://localhost:5173",   # Vite dev server
     "http://127.0.0.1:5173",
@@ -91,7 +86,7 @@ async def health():
 
 @app.get("/status")
 @_limiter.limit("30/minute")
-async def get_status(request):  # noqa: ARG001
+async def get_status(request: Request):  # noqa: ARG001
     mic_ok, mic_reason = _check_mic()
     return {
         "hydradb": {"ok": bool(HYDRADB_API_KEY), "reason": None if HYDRADB_API_KEY else "HYDRA_DB_API_KEY not set"},
@@ -103,13 +98,8 @@ async def get_status(request):  # noqa: ARG001
 
 @app.post("/configure")
 @_limiter.limit("10/minute")
-async def configure(request, body: dict[str, Any]):  # noqa: ARG001
-    """Persist API keys to the sidecar's .env file.
-
-    BUG-6 fix: use python-dotenv's ``set_key`` helper which correctly quotes
-    values that contain ``=``, ``#``, spaces, or other special characters,
-    preventing .env corruption.
-    """
+async def configure(request: Request, body: dict[str, str]):  # noqa: ARG001
+    """Persist API keys to the sidecar's .env file (set_key handles special character quoting)."""
     env_path = Path(__file__).parent / ".env"
     allowed_keys = {"HYDRA_DB_API_KEY", "HYDRA_DB_TENANT_ID", "OPENROUTER_API_KEY"}
     updates = {k: v for k, v in body.items() if k in allowed_keys and v}
@@ -139,19 +129,19 @@ async def transcript_ws(websocket: WebSocket):
 
 @app.get("/contacts")
 @_limiter.limit("30/minute")
-async def list_contacts(request):  # noqa: ARG001
+async def list_contacts(request: Request):  # noqa: ARG001
     return await _fetch_contacts()
 
 
 @app.get("/graph")
 @_limiter.limit("30/minute")
-async def get_graph(request):  # noqa: ARG001
+async def get_graph(request: Request):  # noqa: ARG001
     return await build_graph()
 
 
 @app.get("/brief/{contact_email}")
 @_limiter.limit("20/minute")
-async def get_brief(request, contact_email: str, contact_name: str, company: str):  # noqa: ARG001
+async def get_brief(request: Request, contact_email: str, contact_name: str, company: str):  # noqa: ARG001
     brief, error = await generate_pre_call_brief_safe(contact_email, contact_name, company)
     if error:
         raise HTTPException(status_code=502, detail=f"Brief generation failed: {error}")

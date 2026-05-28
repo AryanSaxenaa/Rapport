@@ -3,6 +3,7 @@ from typing import Any
 
 from hydra_db import AsyncHydraDB
 from hydradb_client import TENANT_ID, _hydradb_client, _with_retry, _to_plain_data
+from sidecar_types import RelationEntry, GraphData
 
 
 VALID_TYPES = frozenset({
@@ -23,7 +24,7 @@ def _edge_color(rel_type: str) -> str:
 
 async def store_relations(
     client: AsyncHydraDB | None,
-    relations: list[dict[str, Any]],
+    relations: list[RelationEntry],
     contact_email: str | None,
     interaction_date: str | None = None,
 ) -> None:
@@ -76,7 +77,7 @@ async def store_relations(
     )
 
 
-async def build_graph() -> dict[str, Any]:
+async def build_graph() -> GraphData:
     """Return evidence-backed directed graph from HydraDB _relations sub-tenant."""
     client = _hydradb_client()
     if not client:

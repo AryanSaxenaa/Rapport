@@ -1,8 +1,8 @@
 import asyncio
 from contextlib import suppress
-from typing import Any
-
 from fastapi import WebSocket
+
+from sidecar_types import WSMessage
 
 
 class ConnectionManager:
@@ -16,7 +16,7 @@ class ConnectionManager:
         with suppress(ValueError):
             self._clients.remove(ws)
 
-    async def broadcast(self, payload: dict[str, Any]) -> None:
+    async def broadcast(self, payload: WSMessage) -> None:
         for ws in self._clients[:]:
             try:
                 await ws.send_json(payload)

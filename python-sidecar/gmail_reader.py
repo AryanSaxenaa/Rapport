@@ -4,6 +4,7 @@ from typing import Any
 
 from google_oauth import get_service
 from html_utils import derive_company, parse_from_header, strip_html
+from sidecar_types import EmailItem
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -35,7 +36,7 @@ def _parse_email_payload(payload: dict[str, Any]) -> str:
     return ""
 
 
-def _parse_email_message(msg: dict[str, Any]) -> dict[str, Any] | None:
+def _parse_email_message(msg: dict[str, Any]) -> EmailItem | None:
     headers = {h["name"].lower(): h["value"] for h in msg.get("payload", {}).get("headers", [])}
     body = _parse_email_payload(msg.get("payload", {}))
     if not body:
@@ -61,7 +62,7 @@ def _parse_email_message(msg: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def fetch_recent_emails(days_back: int = 90) -> list[dict[str, Any]]:
+def fetch_recent_emails(days_back: int = 90) -> list[EmailItem]:
     service = _get_gmail_service()
     if not service:
         print("Gmail: credentials.json not found — skipping OAuth email ingest.")

@@ -1,6 +1,5 @@
 import asyncio
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
@@ -15,6 +14,7 @@ from imap_secret_store import (
 )
 from ingestion_pipeline import process_interaction
 from contact_persistence import LOCAL_CONTACTS_PATH
+from sidecar_types import EmailItem
 from ws_manager import ConnectionManager
 
 
@@ -23,10 +23,10 @@ router = APIRouter()
 
 def create_ingestion_routes(clients: ConnectionManager) -> APIRouter:
 
-    async def _ingest_email_list(emails: list[dict[str, Any]]) -> None:
+    async def _ingest_email_list(emails: list[EmailItem]) -> None:
         sem = asyncio.Semaphore(5)
 
-        async def process_one(email_item: dict[str, Any]) -> None:
+        async def process_one(email_item: EmailItem) -> None:
             async with sem:
                 contact = email_item.get("contact", {})
                 await process_interaction(
@@ -68,7 +68,7 @@ def create_ingestion_routes(clients: ConnectionManager) -> APIRouter:
         await _ingest_email_list(emails)
 
     @router.post("/ingest/imap")
-    async def ingest_imap_endpoint(body: dict[str, Any]):
+    async def ingest_imap_endpoint(body: dict[str, str]):
         host = body.get("host", "").strip()
         username = body.get("username", "").strip()
         password = body.get("password", "")
@@ -102,7 +102,7 @@ def create_ingestion_routes(clients: ConnectionManager) -> APIRouter:
         return {"hosts": list_stored_imap_hosts()}
 
     @router.post("/imap/credentials/use")
-    async def use_stored_imap_credentials(body: dict[str, Any]):
+    async def use_stored_imap_credentials(body: dict[str, str]):
         """Re-use stored IMAP credentials to trigger an email sync."""
         host = body.get("host", "").strip()
         username = body.get("username", "").strip()
@@ -131,7 +131,7 @@ def create_ingestion_routes(clients: ConnectionManager) -> APIRouter:
         return {"status": "ingestion started", "count": len(emails)}
 
     @router.delete("/imap/credentials")
-    async def delete_stored_imap_credentials(body: dict[str, Any]):
+    async def delete_stored_imap_credentials(body: dict[str, str]):
         """Delete stored IMAP credentials."""
         host = body.get("host", "").strip()
         username = body.get("username", "").strip()

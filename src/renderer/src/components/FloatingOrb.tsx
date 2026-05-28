@@ -27,9 +27,6 @@ export function FloatingOrb() {
   }, [isRecording, activeBrief, briefLoading])
 
   async function toggleMinimized() {
-    // BUG-30: Read minimized from the store snapshot at call-time so we
-    // always toggle the current value, not a stale closure.  `setMinimized`
-    // is already available from the hook above, so we don't need getState().
     const next = !minimized
     setMinimized(next)
     if (next) {

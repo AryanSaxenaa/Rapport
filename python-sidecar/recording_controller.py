@@ -1,6 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Any
-
 from fastapi import APIRouter
 
 from audio_capture import AudioCapture, RecordingDisabled
@@ -27,7 +25,7 @@ def create_recording_routes(session: RecordingSession, clients: ConnectionManage
         await clients.broadcast({"type": "transcript", "text": text})
 
     @router.post("/recording/start")
-    async def start_recording(body: dict[str, Any]):
+    async def start_recording(body: dict[str, str]):
         try:
             AudioCapture.check_available()
         except RecordingDisabled as exc:

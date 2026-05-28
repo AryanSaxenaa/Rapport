@@ -5,7 +5,6 @@ stored metadata — never decoded from the sub-tenant ID string (lossy).
 """
 
 import asyncio
-from typing import Any
 
 from contact_persistence import normalize_contact, load_local_contacts
 from hydradb_client import (
@@ -14,6 +13,7 @@ from hydradb_client import (
     _to_plain_data,
     _with_retry,
 )
+from hydra_db import AsyncHydraDB
 from sidecar_types import ContactDict, ContactsResponse
 
 
@@ -25,7 +25,7 @@ def _add_contact(contacts: list[ContactDict], seen: set[str], contact: ContactDi
     contacts.append(contact)
 
 
-async def _iter_from_sub_tenants(client) -> list[ContactDict]:
+async def _iter_from_sub_tenants(client: AsyncHydraDB) -> list[ContactDict]:
     """Fetch contacts via sub-tenant recall_preferences (parallel)."""
     try:
         raw = await _with_retry(lambda: client.tenant.get_sub_tenant_ids(tenant_id=TENANT_ID))
@@ -52,8 +52,10 @@ async def _iter_from_sub_tenants(client) -> list[ContactDict]:
             )
             plain = _to_plain_data(data)
             sources = plain.get("sources") or []
-            meta: dict[str, Any] = {}
+            meta: dict[str, object] = {}
             for src in sources:
+                if not isinstance(src, dict):
+                    continue
                 m = src.get("additional_metadata") or src.get("metadata") or {}
                 if m.get("contact_email"):
                     meta = m
@@ -68,14 +70,14 @@ async def _iter_from_sub_tenants(client) -> list[ContactDict]:
     return [r for r in results if isinstance(r, dict)]
 
 
-def _normalize_contact_src(meta: dict[str, Any]) -> ContactDict:
+def _normalize_contact_src(meta: dict[str, object]) -> ContactDict:
     extracted = meta.get("extracted")
     extracted = extracted if isinstance(extracted, dict) else {}
-    flat: dict[str, Any] = {**extracted, **meta}
+    flat: dict[str, object] = {**extracted, **meta}  # type: ignore[arg-type]
     return normalize_contact(flat)
 
 
-async def _iter_from_full_recall(client) -> list[ContactDict]:
+async def _iter_from_full_recall(client: AsyncHydraDB) -> list[ContactDict]:
     """Fallback: full_recall queries when sub-tenant path returns < 2 contacts."""
     contacts: list[ContactDict] = []
     for query in ("contact", "email interaction", "meeting transcript"):
@@ -103,15 +105,13 @@ async def _iter_from_full_recall(client) -> list[ContactDict]:
                     contacts.append(_normalize_contact_src(meta))
         except Exception as exc:
             print(f"Contact repo: full_recall query '{query}' failed — {exc}")
-            pass
     return contacts
 
 
 async def fetch_contacts() -> ContactsResponse:
     """Return contacts from HydraDB with local persistence as a cache layer.
-
     Returns an empty contacts array with an informative error when HydraDB
-    is unreachable or unconfigured — never fabricates contacts.
+    is unreachable or unconfigured.
     """
     client = _hydradb_client()
 

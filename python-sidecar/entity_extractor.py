@@ -1,18 +1,9 @@
 import json
-import re
 from typing import cast
 
+from html_utils import strip_json_fences
 from openrouter_client import chat, extract_content, parse_model_list
 from sidecar_types import ExtractionResult
-
-# Shared fence-stripping pattern (same as brief_generator.py).
-_FENCE_RE = re.compile(r"^```[a-z]*\n?", re.MULTILINE)
-
-
-def _strip_json_fences(text: str) -> str:
-    """Remove markdown code fences that LLMs commonly wrap JSON responses in."""
-    text = _FENCE_RE.sub("", text.strip())
-    return text.rstrip("`").strip()
 
 EXTRACTION_SYSTEM = """Return ONLY valid JSON with keys:
 people, companies, topics, commitments, relations, unresolved, stance, sentiment_shift, summary.
@@ -47,18 +38,12 @@ _EMPTY_EXTRACTION: ExtractionResult = {
 
 
 class ExtractionError(Exception):
-    """Raised when entity extraction fails with a user-facing message."""
     def __init__(self, message: str, error_type: str = "extraction_failed"):
         super().__init__(message)
         self.error_type = error_type
 
 
 async def extract_entities(text: str) -> ExtractionResult:
-    """Extract relationship entities from text.
-
-    Raises ExtractionError on failure so callers can surface the error to the user
-    instead of silently returning empty data.
-    """
     if not text.strip():
         return {**_EMPTY_EXTRACTION}
 
@@ -75,7 +60,7 @@ async def extract_entities(text: str) -> ExtractionResult:
         content = extract_content(response)
         if not content.strip():
             raise ExtractionError("Extraction model returned an empty response.", "empty_response")
-        return cast(ExtractionResult, json.loads(_strip_json_fences(content)))
+        return cast(ExtractionResult, json.loads(strip_json_fences(content)))
     except ExtractionError:
         raise
     except (json.JSONDecodeError, KeyError, TypeError) as exc:

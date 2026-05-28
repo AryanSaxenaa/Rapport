@@ -11,9 +11,23 @@ export type WsTranscriptMessage = {
   text: string
 }
 
+export type WsBriefData = {
+  contactName: string
+  company: string
+  currentStance: string
+  stanceShiftNote?: string
+  topConcerns: string[]
+  communicationStyle: string
+  talkingPoints: string[]
+  landmines: string[]
+  lastInteraction: string
+  powerNote: string
+  trigger?: string
+}
+
 export type WsBriefMessage = {
   type: 'brief'
-  data: unknown
+  data: WsBriefData
 }
 
 export type WsErrorMessage = {

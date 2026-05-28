@@ -75,8 +75,7 @@ async function startPythonSidecar() {
 
   pythonProcess.on('exit', (code) => {
     pythonProcess = null
-    // BUG-19: Restart the sidecar automatically after a non-zero exit so
-    // the UI doesn't stay permanently offline after a transient crash.
+    // Restart sidecar after non-zero exit
     if (code !== 0 && code !== null) {
       if (isDev) console.warn(`[Python] sidecar exited with code ${code} — restarting in 3 s`)
       setTimeout(() => void startPythonSidecar(), 3000)
@@ -85,8 +84,7 @@ async function startPythonSidecar() {
 }
 
 function createWindow() {
-  // BUG-18: Reset the pre-minimize position whenever a new window is created
-  // so a stale value from a previous window can't mis-position this one.
+  // Reset pre-minimize position for new window
   windowBeforeMinimize = null
 
   mainWindow = new BrowserWindow({
@@ -126,14 +124,12 @@ function createTray() {
     image = nativeImage.createFromPath(trayIconPath)
     if (image.isEmpty()) throw new Error('empty')
   } catch {
-    // Fallback: generate a 32x32 "R" icon using nativeImage
     image = nativeImage.createEmpty()
     const size = 32
     const canvas = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
       <rect width="${size}" height="${size}" rx="6" fill="#6C63FF"/>
       <text x="16" y="23" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF">R</text>
     </svg>`
-    // Electron can load SVG data URLs for nativeImage
     image = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(canvas).toString('base64')}`)
   }
   tray = new Tray(image)
@@ -174,8 +170,12 @@ app.whenReady().then(async () => {
   // Auto-update: only runs in production with electron-updater installed
   if (!isDev) {
     try {
-      // @ts-ignore - electron-updater is an optional dependency injected during official builds
-      const { autoUpdater } = await import('electron-updater')
+      // Dynamic string avoids module-resolution check since electron-updater
+      // is an optional dependency that may not be installed in dev.
+      const modName = 'electron-updater'
+      const { autoUpdater } = await import(modName) as {
+        autoUpdater: { checkForUpdatesAndNotify: () => Promise<void> }
+      }
       autoUpdater.checkForUpdatesAndNotify().catch(() => {/* no network or no release */})
     } catch {
       // electron-updater not installed — skip silently

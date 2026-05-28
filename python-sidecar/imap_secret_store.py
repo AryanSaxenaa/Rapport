@@ -35,7 +35,7 @@ def _load_store() -> dict[str, Any]:
         return {}
     try:
         return json.loads(_CREDENTIALS_PATH.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         return {}
 
 

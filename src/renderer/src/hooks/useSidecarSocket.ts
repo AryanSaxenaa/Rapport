@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react'
-import type { WsMessage } from '../shared/types'
+import type { WsMessage, WsBriefData } from '../shared/types'
 import { SIDECAR_WS_URL } from '../store/rapport-store'
 
 type Handlers = {
   onTranscript: (text: string) => void
-  onBrief: (data: unknown) => void
+  onBrief: (data: WsBriefData) => void
   onError: (message: string) => void
   onStatusChange: (status: 'online' | 'offline') => void
   onConnect: () => void
@@ -43,8 +43,6 @@ export function useSidecarSocket(handlers: Handlers) {
           if (payload.type === 'transcript') handlersRef.current.onTranscript(payload.text)
           if (payload.type === 'brief') handlersRef.current.onBrief(payload.data)
           if (payload.type === 'error') handlersRef.current.onError(payload.message)
-          // BUG-24: ingest_complete was previously unhandled — contacts and the
-          // graph were never refreshed automatically after a background ingest.
           if (payload.type === 'ingest_complete') handlersRef.current.onIngestComplete()
         } catch (err) {
           console.warn('Rapport: malformed WS frame', err)

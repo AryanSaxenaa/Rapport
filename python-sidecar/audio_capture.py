@@ -54,9 +54,7 @@ def _numpy_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
 
 class AudioCapture:
     """Real microphone capture using sounddevice with OpenRouter Whisper transcription.
-
     Raises RecordingDisabled at start() if the mic or transcription API is unavailable.
-    Never simulates or fabricates transcript content.
     """
 
     def __init__(self, on_text: Callable[[str], Awaitable[None]]):

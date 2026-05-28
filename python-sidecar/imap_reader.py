@@ -1,13 +1,11 @@
 import email
-import email.utils
 import imaplib
 import ssl
 from datetime import datetime, timedelta
 from email import policy as email_policy
 from email.message import Message as _EmailMessage
-from typing import Any
-
-from html_utils import derive_company, strip_html
+from html_utils import derive_company, parse_from_header, strip_html
+from sidecar_types import EmailItem
 
 
 class ImapAuthError(Exception):
@@ -24,7 +22,7 @@ def fetch_via_imap(
     username: str,
     password: str,
     since_days: int = 90,
-) -> list[dict[str, Any]]:
+) -> list[EmailItem]:
     """Fetch emails via IMAP SSL and return them in the standard Email shape."""
     ctx = ssl.create_default_context()
     try:
@@ -44,7 +42,7 @@ def fetch_via_imap(
         _status, msg_nums = imap.search(None, f"SINCE {since_date}")
         nums = msg_nums[0].split() if msg_nums[0] else []
 
-        results: list[dict[str, Any]] = []
+        results: list[EmailItem] = []
         for num in nums:
             try:
                 _s, data = imap.fetch(num, "(RFC822)")
@@ -68,7 +66,7 @@ def fetch_via_imap(
     return results
 
 
-def _parse_message(msg: _EmailMessage) -> dict[str, Any] | None:
+def _parse_message(msg: _EmailMessage) -> EmailItem | None:
     subject = str(msg.get("subject") or "")
     from_addr = str(msg.get("from") or "")
     date_str = str(msg.get("date") or "")
@@ -76,25 +74,21 @@ def _parse_message(msg: _EmailMessage) -> dict[str, Any] | None:
     if not body:
         return None
 
-    name, addr = email.utils.parseaddr(from_addr)
+    name, addr = parse_from_header(from_addr)
     return {
         "subject": subject,
         "body": body,
         "date": date_str,
         "contact": {
-            "email": addr.lower(),
+            "email": addr,
             "name": name or addr.split("@")[0].replace(".", " ").title(),
             "company": derive_company(addr),
         },
     }
 
 
-def _extract_body(msg: Any) -> str:
-    """Extract plain-text body from an email message.
-
-    Uses email.message.Message which has incomplete type stubs for runtime
-    methods like get_content(), get_content_type(), get_payload(), and walk().
-    """
+def _extract_body(msg: _EmailMessage) -> str:
+    """Extract plain-text body from an email message."""
     plain = ""
     html_body = ""
     if msg.is_multipart():

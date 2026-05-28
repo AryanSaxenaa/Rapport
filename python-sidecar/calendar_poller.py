@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google_oauth import get_service
+from html_utils import derive_company
 from sidecar_types import MeetingInfo
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
@@ -37,8 +38,7 @@ async def poll_for_upcoming_meetings(
             now = datetime.now(timezone.utc)
             window_end = now + timedelta(minutes=UPCOMING_WINDOW_MINUTES)
 
-            # BUG-8: googleapiclient uses synchronous HTTP — run in a thread
-            # so we don't block the asyncio event loop during the poll.
+            # googleapiclient uses synchronous HTTP — run in a thread.
             events_result = await asyncio.to_thread(
                 service.events()
                 .list(
@@ -68,7 +68,7 @@ async def poll_for_upcoming_meetings(
                     "summary": event.get("summary", "No title"),
                     "contact_email": target["email"],
                     "contact_name": target["name"],
-                    "company": target["email"].split("@")[-1] if "@" in target["email"] else "",
+                    "company": derive_company(target["email"]),
                     "start_time": event.get("start", {}).get("dateTime"),
                 })
 

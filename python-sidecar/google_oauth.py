@@ -12,7 +12,7 @@ CREDENTIALS_PATH = Path(__file__).parent / "credentials.json"
 TOKEN_DIR = Path.home() / ".rapport"
 
 
-def get_service(api: str, version: str, scopes: list[str], token_filename: str) -> Any | None:
+def get_service(api: str, version: str, scopes: list[str], token_filename: str, open_browser: bool = False) -> Any | None:
     """Authenticate and return a Google API service, or None if not configured.
 
     Returns a googleapiclient.discovery.Resource (not typed for compatibility with
@@ -39,7 +39,7 @@ def get_service(api: str, version: str, scopes: list[str], token_filename: str) 
     if not creds:
         try:
             flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), scopes)
-            creds = flow.run_local_server(port=0, open_browser=False)
+            creds = flow.run_local_server(port=0, open_browser=open_browser)
         except Exception:
             return None
 

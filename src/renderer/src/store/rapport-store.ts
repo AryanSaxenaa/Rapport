@@ -164,8 +164,7 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   setActiveBrief: (brief) => set({ activeBrief: brief }),
   setMinimized: (value) => set({ minimized: value }),
   pushTranscript: (line) =>
-    // BUG-32: Store keeps last 4 lines (UI shows last 2) — previously kept
-    // 8 lines that were never rendered, wasting memory.
+    // Keep last 4 lines so UI has a buffer of 2 past the visible window.
     set((state) => ({ liveTranscript: [...state.liveTranscript.slice(-3), line] })),
   setSelectedContact: (contact) => set({ selectedContact: contact }),
 
@@ -193,12 +192,8 @@ export const useRapportStore = create<RapportState>((set, get) => ({
   },
 
   fetchGraph: async () => {
-    try {
-      const data = await sidecarRequest<GraphData>('/graph')
-      set({ graphData: data })
-    } catch (err) {
-      console.warn('Rapport: graph fetch failed', err)
-    }
+    const data = await sidecarRequest<GraphData>('/graph')
+    set({ graphData: data })
   },
 
   fetchDepStatus: async () => {
@@ -256,7 +251,8 @@ export const useRapportStore = create<RapportState>((set, get) => ({
       const brief = await sidecarRequest<Brief>(`/brief/${encodeURIComponent(contactEmail)}?${params}`)
       set({ activeBrief: brief, briefLoading: false })
       return brief
-    } catch {
+    } catch (err) {
+      console.error('Rapport: brief fetch failed', err)
       set({ briefLoading: false })
       return null
     }

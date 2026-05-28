@@ -30,7 +30,7 @@ def load_local_contacts() -> list[ContactDict]:
         return []
     try:
         raw = json.loads(LOCAL_CONTACTS_PATH.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         return []
     contacts = raw if isinstance(raw, list) else raw.get("contacts", [])
     return [normalize_contact(c) for c in contacts if isinstance(c, dict)]
@@ -44,7 +44,7 @@ def save_local_contact(contact: dict[str, Any]) -> None:
 
     contacts = load_local_contacts()
     by_email = {c.get("contactEmail", "").lower(): c for c in contacts}
-    existing: dict = by_email.get(email.lower(), {})
+    existing: ContactDict = by_email.get(email.lower(), {})  # type: ignore[assignment]
     by_email[email.lower()] = {**existing, **normalised}
 
     LOCAL_CONTACTS_PATH.write_text(

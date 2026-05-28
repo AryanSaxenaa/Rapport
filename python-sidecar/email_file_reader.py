@@ -3,9 +3,9 @@
 import email
 import email.policy
 from email.message import Message
-from typing import Any
 
 from html_utils import derive_company, parse_from_header, strip_html
+from sidecar_types import EmailItem
 
 
 def _extract_body(msg: Message) -> str:
@@ -46,7 +46,7 @@ def _extract_body(msg: Message) -> str:
     return ""
 
 
-def _parse_message(msg: Message) -> dict[str, Any] | None:
+def _parse_message(msg: Message) -> EmailItem | None:
     """Convert a stdlib Message into the canonical Email dict."""
     from_header = msg.get("From", "")
     to_header = msg.get("To", "")
@@ -78,21 +78,19 @@ def _parse_message(msg: Message) -> dict[str, Any] | None:
     }
 
 
-def parse_eml(data: bytes) -> dict[str, Any] | None:
+def parse_eml(data: bytes) -> EmailItem | None:
     """Parse a single .eml file. Returns canonical Email dict or None."""
     msg = email.message_from_bytes(data, policy=email.policy.compat32)
     return _parse_message(msg)
 
 
-def parse_mbox(data: bytes) -> list[dict[str, Any]]:
+def parse_mbox(data: bytes) -> list[EmailItem]:
     """Parse an .mbox file. Returns list of canonical Email dicts.
 
-    Each message in mbox format is preceded by a ``From `` separator line.
-    BUG-14 fix: that separator line must be *discarded*, not prepended to the
-    next message body.  The previous code used ``current = [line]`` which
-    included the ``From `` line in every message.
+    Each message in mbox format is preceded by a ``From `` separator line
+    which must be discarded (not included in the message body).
     """
-    results: list[dict[str, Any]] = []
+    results: list[EmailItem] = []
     raw_text = data.decode("utf-8", errors="replace")
     current: list[str] = []
 

@@ -9,49 +9,30 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
+from typing import Any
+
+from google_oauth import get_service
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
-CREDENTIALS_PATH = Path(__file__).parent / "credentials.json"
-TOKEN_DIR = Path.home() / ".rapport"
-TOKEN_PATH = TOKEN_DIR / "calendar_token.json"
 
 print("Opening browser for Google Calendar OAuth...")
 
-creds = None
-if TOKEN_PATH.exists():
-    try:
-        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
-    except Exception:
-        creds = None
-
-if creds and creds.expired and creds.refresh_token:
-    creds.refresh(Request())
-
-if not creds:
-    if not CREDENTIALS_PATH.exists():
-        print(f"credentials.json not found at {CREDENTIALS_PATH}")
-        sys.exit(1)
-    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
-    creds = flow.run_local_server(port=0)
-
-TOKEN_DIR.mkdir(parents=True, exist_ok=True)
-with open(TOKEN_PATH, "w") as f:
-    f.write(creds.to_json())
+service: Any = get_service("calendar", "v3", SCOPES, "calendar_token.json", open_browser=True)
+if not service:
+    print("\n credentials.json not found or auth failed.")
+    print("   Place credentials.json in python-sidecar/ (download from Google Cloud Console).")
+    print("   Visit: https://console.cloud.google.com/apis/credentials")
+    sys.exit(1)
 
 try:
-    service = build("calendar", "v3", credentials=creds)
     calendar = service.calendars().get(calendarId="primary").execute()
-    print(f"\n✅ Authenticated with Calendar: {calendar.get('summary', 'Primary')}")
-    print(f"   Token saved to {TOKEN_PATH}")
+    print(f"\n Authenticated with Calendar: {calendar.get('summary', 'Primary')}")
+    print("   Token saved to ~/.rapport/calendar_token.json")
 except Exception as exc:
     error_str = str(exc)
     if "has not been used" in error_str or "not enabled" in error_str or "403" in error_str:
-        print("\n❌ Calendar API is not enabled yet.")
+        print("\n Calendar API is not enabled yet.")
         print("   Visit: https://console.cloud.google.com/apis/library/calendar-json.googleapis.com?project=rapport-496712")
         print("   Click ENABLE, wait a minute, then run this script again.")
     else:
-        print(f"\n❌ Calendar auth failed: {exc}")
+        print(f"\n Calendar auth failed: {exc}")

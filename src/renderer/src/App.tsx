@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Activity, Database, Radio, RefreshCw, Settings, Upload, Users } from 'lucide-react'
 import { CommandBar } from './components/CommandBar'
@@ -10,6 +10,29 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { useSidecarSocket } from './hooks/useSidecarSocket'
 import { SIDECAR_URL, useRapportStore } from './store/rapport-store'
 import type { Contact, Brief } from './store/rapport-store'
+import type { WsBriefData } from './shared/types'
+
+function SlideUpOverlay({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  return (
+    <motion.div
+      className="command-layer"
+      drag="y"
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={0.4}
+      onDragEnd={(_e, { offset, velocity }) => {
+        if (offset.y > 100 || velocity.y > 500) onClose()
+      }}
+      initial={{ opacity: 0, y: 40, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 40, scale: 0.95 }}
+      transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+    >
+      <div className="glass-panel" style={{ borderRadius: 8 }}>
+        {children}
+      </div>
+    </motion.div>
+  )
+}
 
 export function App() {
   const {
@@ -42,24 +65,17 @@ export function App() {
   const [dragOver, setDragOver] = useState(false)
   const [fileIngestStatus, setFileIngestStatus] = useState<string | null>(null)
 
-  // BUG-22: Previously, fetchContacts/fetchGraph/fetchDepStatus were both called
-  // here in a useEffect AND again inside onConnect, causing a double-fetch on
-  // every WebSocket connection.  The single source of truth is onConnect: it
-  // fires once when the socket first connects (or reconnects), which is exactly
-  // when stale data needs refreshing.  The standalone useEffect is removed.
   useSidecarSocket({
     onStatusChange: setSidecarStatus,
     onConnect: () => { void fetchContacts(); void fetchGraph(); void fetchDepStatus() },
     onTranscript: pushTranscript,
-    onBrief: (data) => setActiveBrief(data as Brief),
+    onBrief: (data: WsBriefData) => setActiveBrief(data as Brief),
     onError: (msg) => pushTranscript(`Error: ${msg}`),
-    // BUG-24: Handle ingest_complete so contacts + graph refresh automatically
-    // after any background ingest batch (file, IMAP, or Gmail).
+    // Refresh contacts + graph after background ingest.
     onIngestComplete: () => { void fetchContacts(); void fetchGraph() },
   })
 
-  // Fallback: if the WebSocket never connects (offline), still attempt to load
-  // contacts once on mount via HTTP so the UI isn't completely blank.
+  // Load contacts via HTTP on mount if WebSocket hasn't connected.
   useEffect(() => {
     if (sidecarStatus !== 'online') {
       void fetchContacts()
@@ -86,8 +102,6 @@ export function App() {
       form.append('file', file)
       try {
         const res = await fetch(`${SIDECAR_URL}/ingest/file`, { method: 'POST', body: form })
-        // BUG-25: Must check res.ok before calling res.json() — an error
-        // response may not be valid JSON, or may be a FastAPI HTML error page.
         if (!res.ok) throw new Error(`Ingest failed: HTTP ${res.status}`)
         const data = await res.json() as { count?: number }
         total += data.count ?? 0
@@ -98,18 +112,12 @@ export function App() {
     return total
   }
 
-  async function handleFileDrop(event: React.DragEvent<HTMLElement>) {
-    event.preventDefault()
-    setDragOver(false)
-    // BUG-26: The old code performed the file-type check separately and then
-    // passed the raw FileList (with any invalid files still in it) to ingestFiles.
-    // ingestFiles already filters internally, so we just let it handle everything
-    // and only show the 'no valid files' message when the count comes back zero.
+  async function handleIngestResult(files: FileList | File[], emptyMessage?: string) {
     try {
       setFileIngestStatus('Ingesting files…')
-      const total = await ingestFiles(event.dataTransfer.files)
+      const total = await ingestFiles(files)
       if (total === 0) {
-        setFileIngestStatus('Only .eml and .mbox files are supported.')
+        setFileIngestStatus(emptyMessage ?? 'Only .eml and .mbox files are supported.')
         return
       }
       setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
@@ -119,6 +127,12 @@ export function App() {
     } catch (err) {
       setFileIngestStatus(err instanceof Error ? err.message : 'Ingest failed.')
     }
+  }
+
+  async function handleFileDrop(event: React.DragEvent<HTMLElement>) {
+    event.preventDefault()
+    setDragOver(false)
+    await handleIngestResult(event.dataTransfer.files)
   }
 
   return (
@@ -268,20 +282,7 @@ export function App() {
               input.multiple = true
               input.onchange = async () => {
                 if (!input.files?.length) return
-                try {
-                  setFileIngestStatus('Ingesting files…')
-                  const total = await ingestFiles(input.files)
-                  if (total === 0) {
-                    setFileIngestStatus('No valid .eml or .mbox emails found in the selected files.')
-                    return
-                  }
-                  setFileIngestStatus(`Queued ${total} email${total !== 1 ? 's' : ''} for extraction.`)
-                  setTimeout(() => setFileIngestStatus(null), 4000)
-                  void fetchContacts()
-                  void fetchGraph()
-                } catch (err) {
-                  setFileIngestStatus(err instanceof Error ? err.message : 'Ingest failed.')
-                }
+                await handleIngestResult(input.files, 'No valid .eml or .mbox emails found in the selected files.')
               }
               input.click()
             }}
@@ -320,49 +321,17 @@ export function App() {
 
       <AnimatePresence>
         {commandOpen && (
-          <motion.div
-            className="command-layer"
-            drag="y"
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={0.4}
-            onDragEnd={(_e, { offset, velocity }) => {
-              if (offset.y > 100 || velocity.y > 500) {
-                setCommandOpen(false)
-              }
-            }}
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-          >
-            <div className="glass-panel" style={{ borderRadius: 8 }}>
-              <CommandBar onClose={() => setCommandOpen(false)} />
-            </div>
-          </motion.div>
+          <SlideUpOverlay onClose={() => setCommandOpen(false)}>
+            <CommandBar onClose={() => setCommandOpen(false)} />
+          </SlideUpOverlay>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {settingsOpen && (
-          <motion.div
-            className="command-layer"
-            drag="y"
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={0.4}
-            onDragEnd={(_e, { offset, velocity }) => {
-              if (offset.y > 100 || velocity.y > 500) {
-                setSettingsOpen(false)
-              }
-            }}
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-          >
-            <div className="glass-panel" style={{ borderRadius: 8 }}>
-              <SettingsPanel onClose={() => setSettingsOpen(false)} />
-            </div>
-          </motion.div>
+          <SlideUpOverlay onClose={() => setSettingsOpen(false)}>
+            <SettingsPanel onClose={() => setSettingsOpen(false)} />
+          </SlideUpOverlay>
         )}
       </AnimatePresence>
     </main>

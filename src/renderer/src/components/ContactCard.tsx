@@ -17,8 +17,7 @@ export function ContactCard({ contact }: { contact: Contact }) {
     .toUpperCase()
     .slice(0, 2)
 
-  // BUG-23: Reset loading when the contact prop changes so the button never
-  // shows 'Generating…' for a contact that has no active fetch in flight.
+  // Reset loading state when switching contacts.
   useEffect(() => {
     setLoading(false)
   }, [contact.contactEmail])
@@ -70,7 +69,6 @@ export function ContactCard({ contact }: { contact: Contact }) {
         )}
         {contact.summary && (
           <p className="interaction-note">
-            {/* BUG-28: FileText is semantically correct for a summary; CalendarDays was copy-pasted from the lastInteraction block above */}
             <FileText size={12} />
             {contact.summary}
           </p>

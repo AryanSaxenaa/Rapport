@@ -8,7 +8,7 @@ from hydra_db import AsyncHydraDB
 from hydra_db.core import ApiError
 
 from contact_persistence import save_local_contact
-from sidecar_types import ErrorPayload, ExtractionResult
+from sidecar_types import ErrorPayload, ExtractionResult, HydraDBWriteResult
 
 T = TypeVar("T")
 
@@ -91,7 +91,7 @@ async def write_interaction_to_hydradb(
     extracted: ExtractionResult,
     interaction_type: str,
     raw_text: str,
-) -> dict[str, Any]:
+) -> HydraDBWriteResult:
     content = (
         f"{contact_name or 'Unknown contact'} at {company or 'Unknown company'}: "
         f"{extracted.get('summary') or raw_text[:800]}"
@@ -162,7 +162,6 @@ async def write_interaction_to_hydradb(
                 )
             except Exception as exc:
                 print(f"HydraDB: manifest write failed (non-fatal) — {exc}")
-                pass
 
     except Exception as exc:
         return {"status": "error", "transport": "python-sdk", "error": _error_payload(exc)}

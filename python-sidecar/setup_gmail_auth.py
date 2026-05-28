@@ -8,13 +8,14 @@ You only need to do this once — tokens auto-refresh thereafter.
 import sys
 from pathlib import Path
 
-# Ensure python-sidecar is on the path
 sys.path.insert(0, str(Path(__file__).parent))
+
+from googleapiclient.discovery import Resource
 
 from gmail_reader import _get_gmail_service
 
 print("Opening browser for Gmail OAuth...")
-service = _get_gmail_service()
+service: Resource | None = _get_gmail_service()
 
 if service:
     profile = service.users().getProfile(userId="me").execute()
